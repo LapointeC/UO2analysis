@@ -9,11 +9,16 @@ from milady import *
 from create_inputs import *
 from milady_writer import *
 from my_cfg_reader import my_cfg_reader
+
 from sklearn.covariance import MinCovDet, EllipticEnvelope
+from sklearn.decomposition import PCA
 
 import matplotlib.pyplot as plt
 
 from typing import List, Dict
+import latex
+plt.rcParams['text.usetex'] = True
+plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 
 ####################################################
 ## Histogramms
@@ -107,9 +112,11 @@ class MCD_analysis_object :
     def __init__(self, dbmodel : DBManager) -> None : 
         self.dic_class : Dict[str,Dict[str,List[Atoms]]] = {}
         self.mcd_model : Dict[str,MinCovDet]= {}
+        self.pca_model : Dict[str,PCA] = {}
 
         for key in dbmodel.model_init_dic.keys() : 
             if key[0:6] in self.dic_class.keys() : 
+                descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
                 for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) :
                     atoms = Atoms()
                     atoms.append(at)          
@@ -138,7 +145,6 @@ class MCD_analysis_object :
     def _fit_mcd_model(self, list_atoms : List[Atoms], species : str, contamination : float = 0.05) -> None : 
         """Build the mcd model for a given species"""
         self.mcd_model[species] = MinCovDet(support_fraction=1.0-contamination)
-        #self.mcd_model[species] = EllipticEnvelope(contamination=contamination)
         descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
         self.mcd_model[species].fit(descriptors_array)
 
@@ -146,9 +152,17 @@ class MCD_analysis_object :
         """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance"""
         for atoms in list_atoms : 
             mcd_distance = self.mcd_model[species].mahalanobis(atoms.get_array('milady-descriptors'))  
-            atoms.set_array('mcd-distance',mcd_distance, dtype=float)
+            atoms.set_array('mcd-distance',np.sqrt(mcd_distance), dtype=float)
 
         return list_atoms
+
+    def _get_pca_model(self, list_atoms : List[Atoms], species : str, n_component : int = 2) -> np.ndarray : 
+        """Build PCA model from data"""
+        self.pca_model[species] = PCA(n_components=n_component)
+        descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
+        return self.pca_model[species].fit_transform(descriptors_array)
+
+
 
     def perform_mcd_analysis(self, species : str, contamination : float = 0.05) -> None : 
         """Perform MCD analysis for a given species"""
@@ -165,13 +179,35 @@ class MCD_analysis_object :
         print('... MCD envelop is fitted ...')
         updated_atoms = self._get_mcd_distance(list_atom_species,species)
 
-        plt.figure()
-        list_mcd = [at.get_array('mcd-distance') for at in updated_atoms]
-        plt.hist(list_mcd,bins=30,density=True)
-        plt.xlabel(r'MCD distance for {:s} atoms'.format(species))
-        plt.ylabel(r'Probability density')
-        plt.savefig('{:s}_dmcd_distribution.pdf'.format(species),dpi=300)
-        plt.show()
+        #mcd distribution 
+        fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(13,6))
+        list_mcd = [at.get_array('mcd-distance').flatten()[0] for at in updated_atoms]
+        n, _, patches = axis[0].hist(list_mcd,density=True,bins=50,alpha=0.7)
+        for i in range(len(patches)):
+            patches[i].set_facecolor(plt.cm.viridis(n[i]/max(n)))
+
+        axis[0].set_xlabel(r'MCD distance $d_{\textrm{MCD}}$ for %s atoms'%(species))
+        axis[0].set_ylabel(r'Probability density')
+
+        #pca ! 
+        cm = plt.cm.get_cmap('gnuplot')
+        print('')
+        print('... Starting PCA analysis for {:s} atoms ...'.format(species))
+        desc_transform = self._get_pca_model(list_atom_species, species, n_component=2)
+        scat = axis[1].scatter(desc_transform[:,0],desc_transform[:,1],
+                               c=list_mcd,
+                               cmap=cm,
+                               edgecolors='grey',
+                               linewidths=0.5,
+                               alpha=0.5)
+        print('... PCA analysis is done ...'.format(species))
+        axis[1].set_xlabel(r'First principal component for {:s} atoms'.format(species))
+        axis[1].set_ylabel(r'Second principal component for {:s} atoms'.format(species))
+        cbar = fig.colorbar(scat,ax=axis[1])
+        cbar.set_label(r'MCD disctances $d_{\tect{MCD}}$', rotation=270)
+        plt.tight_layout()
+
+        plt.savefig('{:s}_distribution_analysis.pdf'.format(species),dpi=300)
 
 #######################################################
 
@@ -182,7 +218,8 @@ class MCD_analysis_object :
 path_bulk = '/home/lapointe/WorkML/UO2Analysis/data/thermique'
 dic_sub_class = {'600K':'01_000','300K':'00_000'}
 milady_compute = False
-pickle_file = 'dataUO2.pickle'
+pickle_data_file = 'dataUO2.pickle'
+pickle_model_file = 'MCD.pickle'
 
 #path_bulk = '/home/lapointe/WorkML/UO2Analysis/data/I1UO2'
 
@@ -222,14 +259,20 @@ if milady_compute :
     mld_calc.calculate(properties=['milady-descriptors'])
     print('... Milady calculation is done ...')
 
-    if os.path.exists(pickle_file) : 
-        os.remove(pickle_file)
+    if os.path.exists(pickle_data_file) : 
+        os.remove(pickle_data_file)
     print('... Writing pickle object ...')
-    pickle.dump(mld_calc.dbmodel, open(pickle_file,'wb'))
+    pickle.dump(mld_calc.dbmodel, open(pickle_data_file,'wb'))
     print('... Pickle object is written :) ...')
 
 else : 
     print('... Starting from the previous pickle file ...')
-    previous_dbmodel = pickle.load(open(pickle_file,'rb'))
+    previous_dbmodel = pickle.load(open(pickle_data_file,'rb'))
     analysis_mcd = MCD_analysis_object(previous_dbmodel)
     analysis_mcd.perform_mcd_analysis('U',contamination=0.05)
+    analysis_mcd.perform_mcd_analysis('O',contamination=0.05)
+    print()
+    print('... Writing pickle object ...')
+    pickle.dump(analysis_mcd, open(pickle_model_file,'wb'))
+    print('... Pickle object is written :) ...')
+    plt.show()
