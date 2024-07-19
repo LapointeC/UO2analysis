@@ -1,0 +1,46 @@
+<MC>
+	<Parameters>
+		<CoresPerWorker>2</CoresPerWorker>
+		<Mode>SGC-MC</Mode>
+		
+		<Temperature>1500.0</Temperature>
+		<MuGrid>
+			<Min>-1.0</Min>
+			<Max>1.0</Max>
+			<NumberMu>20</NumberMu>
+		</MuGrid>
+		<FractionSwap>0.25</FractionSwap>
+
+		<DeltaTau>0.0025</DeltaTau>	
+		<DampingT>0.5</DampingT>
+		<DampingP>6.25</DampingP>
+
+		<FrequencyMC>50</FrequencyMC>
+		<NumberNPTSteps>5000</NumberNPTSteps>
+		<Configuration>NiCo.dat</Configuration>
+	</Parameters>
+
+	<Pathways> 
+		<Potential>NiCoCr.lammps.eam</Potential>
+	</Pathways>
+
+	<Scripts>
+		<Input>
+		  	boundary        p p p
+			units           metal
+			atom_style      atomic
+			atom_modify map array sort 0 0.0
+			
+			read_data       NiCo.dat
+			
+			pair_style      eam/alloy
+			pair_coeff      * * NiCoCr.lammps.eam Ni Co
+			timestep        0.0025
+			group            Ni type 1
+			group            Co type 2
+			mass   1         58.6934
+			mass   2         58.933195
+		</Input>
+	</Scripts>
+
+</MC>
