@@ -1,6 +1,6 @@
 from __future__ import annotations
 import numpy as np
-import os
+import os, shutil
 import xml.etree.ElementTree as ET
 import numpy as np
 from typing import Union,Any,List
@@ -70,7 +70,7 @@ class BaseParser:
         """
             Ensure configuration file exists
         """        
-        configuration = self.parameters["Configuration"]
+        configuration = self.Configuration
         return os.path.exists(configuration)
 
     def to_dict(self) -> dict:
@@ -90,6 +90,8 @@ class BaseParser:
         read_parameters() will *only* overwrite these values
         """
         self.parameters = {}
+
+        self.parameters["Restart"] = False
         self.parameters["CoresPerWorker"] = 1
         self.parameters["Verbose"] = 0
         self.parameters["Temperature"] = 10.0 
@@ -98,7 +100,7 @@ class BaseParser:
         self.parameters["GlobalSeed"] = 1285237
         self.parameters["LogLammps"] = False
 
-        self.parameters["Configuration"] = 'to_set'
+        self.parameters["WritingDirectory"] = './dump'
 
         self.parameters['Mode'] = 'SGC-MC' 
         #SGC-MC
@@ -115,6 +117,27 @@ class BaseParser:
         self.parameters["Kappa"] = 0.1
         self.parameters["WritingStep"] = 1000
 
+    def create_writing_directory(self, path : os.PathLike[str]) -> None : 
+        """Build the directory to write dump files 
+        
+        Parameters
+        ----------
+
+        path : os.PathLike[str]
+            Path to the writing directory
+        
+        """
+        if os.path.exists(path) and not self.parameters["Restart"] : 
+            shutil.rmtree(path)
+            os.mkdir(path)
+        
+        elif os.path.exists(path) and self.parameters["Restart"] : 
+            pass
+
+        else : 
+            os.mkdir(path)
+        return 
+
     def read_pathways(self, xml_parameters:ET.Element) -> None : 
         """Read in pathway configuration paths defined in the XML file 
 
@@ -130,6 +153,10 @@ class BaseParser:
                 self.Configuration = var.text.strip()
             elif var.tag == "Potential" :
                 potential = var.text.strip()
+            elif var.tag == "WritingDirectory" : 
+                self.parameters["WritingDirectory"] = var.text
+        if self.rank == 0 :
+            self.create_writing_directory(self.parameters["WritingDirectory"])
         self.set_potential(potential)
         return 
 
@@ -168,12 +195,12 @@ class BaseParser:
             else:
                 o = self.parameters[tag]
                 n = var.text
-                if isinstance(o,int):
+                if isinstance(o,bool):
+                    self.parameters[tag] = boolean_converter(n)
+                elif isinstance(o,int):
                     self.parameters[tag] = int(n)
                 elif isinstance(o,float):
                     self.parameters[tag] = float(n)
-                elif isinstance(o,bool):
-                    self.parameters[tag] = boolean_converter(n)
                 elif isinstance(o,str):
                     self.parameters[tag] = n
                 elif isinstance(o,list):
@@ -229,7 +256,7 @@ class BaseParser:
         """
 
         self.scripts["NPTScript"] = """
-        fix             1  all npt temp %TEMPERATURE% %TEMPERATURE% %DAMPT% iso 0.0 0.0 %DAMPP% fixedpoint 0.0 0.0 0.0
+        fix             npt_samp  all npt temp %TEMPERATURE% %TEMPERATURE% %DAMPT% iso 0.0 0.0 %DAMPP% fixedpoint 0.0 0.0 0.0
         """
 
     def read_scripts(self,xml_scripts : ET.Element) -> None:

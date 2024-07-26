@@ -3,6 +3,9 @@
 		<CoresPerWorker>2</CoresPerWorker>
 		<Mode>SGC-MC</Mode>
 		
+		<Restart>True</Restart>
+		<Verbose>0</Verbose>
+		<ThermalisationSteps>100</ThermalisationSteps>
 		<Temperature>1500.0</Temperature>
 		<MuGrid>
 			<Min>-1.0</Min>
@@ -16,12 +19,13 @@
 		<DampingP>6.25</DampingP>
 
 		<FrequencyMC>50</FrequencyMC>
-		<NumberNPTSteps>5000</NumberNPTSteps>
-		<Configuration>NiCo.dat</Configuration>
+		<NumberNPTSteps>500</NumberNPTSteps>
 	</Parameters>
 
 	<Pathways> 
+		<Configuration>NiCo.dat</Configuration>
 		<Potential>NiCoCr.lammps.eam</Potential>
+		<WritingDirectory>./write_data</WritingDirectory>
 	</Pathways>
 
 	<Scripts>
@@ -31,7 +35,7 @@
 			atom_style      atomic
 			atom_modify map array sort 0 0.0
 			
-			read_data       NiCo.dat
+			read_data       %Configuration%
 			
 			pair_style      eam/alloy
 			pair_coeff      * * NiCoCr.lammps.eam Ni Co

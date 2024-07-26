@@ -1,7 +1,7 @@
 from __future__ import annotations
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 import numpy as np
-import os, argparse
+import os, argparse, re
 from mpi4py import MPI
 
 #from BaseManager import BaseManager
@@ -24,7 +24,7 @@ class MCManager(BaseManager):
                  xml_path:None|os.PathLike[str]=None,
                  parameters:None|BaseParser=None,
                  Worker:LAMMPSWorker=LAMMPSWorker) -> None:
-        """Default manager of MAB, child of BaseManager
+        """Default manager of MC calculation, child of BaseManager
 
         Parameters
         ----------
@@ -47,7 +47,78 @@ class MCManager(BaseManager):
             parameters = BaseParser(xml_path=xml_path,rank=world.Get_rank())
         
         super().__init__(world, parameters, Worker)
+
+    
+
+    def manage_restart(self, lammps_worker : LAMMPSWorker, dic_mu : dict = None, alpha : float = 0.1) -> dict : 
+
+        def extract_numbers(s : str) -> List[float]:
+            """"Extract float from string 
+            
+            Parameters
+            ----------
+
+            s : str 
+                Original string
+
+            Return
+            ------
+
+            List[float]
+                List of float contains in string
+            """
+            # Regular expression pattern to match both integers and floating-point numbers
+            number_pattern = r'-?\d+(?:\.\d+)?'
+            number_strings = re.findall(number_pattern, s)
+            return [float(num) for num in number_strings]
+
+        if self.rank == 0 : 
+            print('... You are using restart option ...')
+            self.log('... You are using restart option ...')
+
+        if self.parameters.parameters["Mode"] == 'SGC-MC' : 
+            restart_file = max([ f'{self.parameters.parameters['WritingDirectory']}/{f}' for f in os.listdir(self.parameters.parameters['WritingDirectory']) ],
+                               key = os.path.getatime)
+            last_mu = extract_numbers(os.path.basename(restart_file))[0]
+            if last_mu > 0 :
+                alpha = alpha + 1.0 
+            else : 
+                alpha = -alpha + 1.0
+            new_dic_mu = {key: value for key, value in dic_mu.items() if key > alpha*last_mu}
+
+            #update lammps worker 
+            self.parameters.Configuration = restart_file
+            lammps_worker.run_commands("clear")
+            lammps_worker.run_script("Input")
+
+            return new_dic_mu
         
+        elif self.parameters.parameters["Mode"] == 'VC-SGC-MC' :
+            restart_file = max([ f'{self.parameters.parameters['WritingDirectory']}/{f}' for f in os.listdir(self.parameters.parameters['WritingDirectory']) ],
+                               key = os.path.getatime)
+            self.parameters.Configuration = restart_file
+            lammps_worker.run_script("Input")
+            
+            return None                    
+
+        else : 
+            raise NotImplementedError('... This mode is not implemented for restart ...')
+
+
+    def log(self,string : str) -> None :
+        """Writing log file with reuslts ...
+        
+        Parameters:
+        -----------
+
+        string : str 
+            string to write in log file 
+
+        """
+        with open('mc.log','a') as w : 
+            w.write(f'{string} \n')
+        return
+
     
     def get_number_of_atoms_each_species(self) -> Tuple[np.ndarray,np.ndarray] : 
         """Get the number of atoms of each species in the system
@@ -129,10 +200,14 @@ class MCManager(BaseManager):
         _, array_species = self.get_number_of_atoms_each_species()
         if self.parameters.parameters['Mode'] == 'SGC-MC' :
             """"HERE IS THE SEMI GRAND CANONICAL MC"""
+            dic_mu = self.build_mu_dict(self.parameters.parameters['MuGrid'])
+            if self.parameters.parameters["Restart"] : 
+                dic_mu = self.manage_restart(self.Worker, dic_mu=dic_mu)
+            
             if self.rank == 0 : 
                 print('delta mu | <c0> | <c1> | <c^2> - <c>^2') 
+                self.log('delta mu | <c0> | <c1> | <c^2> - <c>^2')
 
-            dic_mu = self.build_mu_dict(self.parameters.parameters['MuGrid'])
             npt_script = self.create_npt_script(self.parameters.scripts['NPTScript'])
 
             self.Worker.run_commands(npt_script)
@@ -143,18 +218,18 @@ class MCManager(BaseManager):
                     raise TimeoutError('Array of chemical potential and species in the system are inconsistant')
                 
                 # main program 
-                MC_object = SGCMC( grid_mu, array_species, self.Worker)
+                MC_object = SGCMC(grid_mu, array_species, self.Worker, self.parameters.parameters["WritingDirectory"])
                 nb_main_step = int(self.parameters.parameters['NumberNPTSteps']/self.parameters.parameters['FrequencyMC'])
                 for nb_it in range(nb_main_step) : 
                     MC_object.perform_lammps_script(f'run {self.parameters.parameters['FrequencyMC']}')
                     _ = MC_object.perform_SGCMC(self.parameters.parameters['FractionSwap'],self.parameters.parameters['Temperature'])
-                    
 
                 if self.rank == 0 : 
                     average_c, variance_c = MC_object.compute_average()
                     delta_mu = grid_mu[1] - grid_mu[0]
                     print('{:1.3f} | {:1.3f} | {:1.3f} | {:1.3f} '.format(delta_mu,average_c[0],average_c[1],np.sqrt(variance_c[1])))
-                
+                    self.log('{:1.3f} | {:1.3f} | {:1.3f} | {:1.3f} '.format(delta_mu,average_c[0],average_c[1],np.sqrt(variance_c[1])))
+                MC_object.dump_configuration('{:1.3f}'.format(grid_mu[1]))                
 
         elif self.parameters.parameters['Mode'] == 'VC-SGC-MC' :
             """"HERE IS THE VARIANCE CONSTRAINED SEMI GRAND CANONICAL MC"""
@@ -167,12 +242,16 @@ class MCManager(BaseManager):
             if len(array_concentration) != len(array_species) and self.rank == 0 : 
                 raise TimeoutError('Array of concentrations and species in the system are inconsistant')
             
+            if self.parameters.parameters["Restart"] : 
+                dic_mu = self.manage_restart(self.Worker, dic_mu=dic_mu)
+            
             if self.rank == 0 : 
                 array_txt = [ f' <c{i}> |' for i in range(len(array_concentration)) ] + [' max( <c^2> - <c>^2 )']
                 print("".join(array_txt)) 
+                self.log("".join(array_txt))
 
             npt_script = self.create_npt_script(self.parameters.scripts['NPTScript'])
-            VCMC_object = VC_SGCMC(array_mu, array_concentration, array_species, self.parameters.parameters['Kappa'], self.Worker)
+            VCMC_object = VC_SGCMC(array_mu, array_concentration, array_species, self.parameters.parameters['Kappa'], self.Worker, self.parameters.parameters["WritingDirectory"])
     
 
             # main program 
@@ -183,12 +262,13 @@ class MCManager(BaseManager):
                 _ = VCMC_object.perform_VC_SGCMC(self.parameters.parameters['FractionSwap'],self.parameters.parameters['Temperature'])
 
                 if nb_it%patched_writing_step : 
-                    VCMC_object.dump_configuration(nb_it)
+                    VCMC_object.dump_configuration('{:4d}'.format(nb_it))
                     if self.rank == 0 : 
                         average_c, variance_c = VCMC_object.compute_average()
                         array_txt = [' {:1.3f} |'.format(c) for c in average_c ] + [' {:1.3f}'.format(np.amax(np.sqrt(variance_c)))]
                         print("".join(array_txt))
-
+                        self.log("".join(array_txt))
+        
         else : 
             raise NotImplementedError('This mode is not implemented !')
 

@@ -49,6 +49,7 @@ class BaseWorker:
         self.Periodicity = None
         self.invCell = None
         self.parameters.seed(worker_instance)
+        #self.parameters.seed(123)
         self.kB = 8.617e-5
         self.mass_array : np.ndarray = None
         self.mass_dictionary = {"H":1.008,"He":4.003,"Li":6.941,"Be":9.012,"B":10.811,
