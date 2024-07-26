@@ -4,7 +4,6 @@ from numpy.random import uniform, randint
 from typing import List, Dict, TypedDict, Tuple 
 
 from mpi4py import MPI
-import os
 
 class Average(TypedDict) : 
     """Little class to easily compute average !"""
@@ -85,23 +84,23 @@ class SGCMC :
         #gather type ! 
         type_array = self.worker.L.gather('type',0,1)
         old_species = type_array[id_atom]
-        
-        #scatter new type
-        type_array[id_atom] = new_species
-        self.worker.L.scatter('type',0,1,type_array)
-        
-        #new energy
-        self.worker.run_commands("run 0 post no pre no")
-        new_energy = self.worker.get_energy()
+         
+        if new_species == old_species : 
+            return 0.0, old_species
 
-        #update old energy
-        self.old_energy = new_energy
-        #if self.worker.rank == 0 : 
-        #    comp = [id for id in range(len(new)) if new[id]-ref[id] != 0 ]
-        #    print('deltaE | old_species | new_species | id | delta comp')
-        #    print(new_energy - old_energy, old_species, new_species, id_atom, comp)
+        else :
+            #scatter new type
+            type_array[id_atom] = new_species
+            self.worker.L.scatter('type',0,1,type_array)
 
-        return new_energy - old_energy, old_species
+            #new energy
+            self.worker.run_commands("run 0 post no")
+            new_energy = self.worker.get_energy()
+
+            #update old energy
+            self.old_energy = new_energy
+
+            return new_energy - old_energy, old_species
     
     def trial_step_SGCMC(self, id_atom : int, new_species : str | int, temperature : float) -> float : 
         """Perform the trial step of SGCMC
@@ -125,10 +124,6 @@ class SGCMC :
             Acceptance result : 1 if accepted 0 otherwise
         """
         deltaE, old_species = self.compute_deltaE(id_atom, new_species)
-        if old_species == new_species and abs(deltaE) > 1e-5 : 
-            self.change_species(id_atom, old_species)
-            self.old_energy += - deltaE
-            return 0.0
 
         #change delta N for acceptance
         tmp_delta_N_array = self.delta_N_array
