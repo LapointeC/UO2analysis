@@ -96,6 +96,7 @@ class BaseParser:
         self.parameters["Verbose"] = 0
         self.parameters["Temperature"] = 10.0 
         self.parameters["MuGrid"] = {"Min":0.0,"Max":1.0,"NumberMu":100}        
+        self.parameters["EquivMu"] = [1,2]
         self.parameters["ThermalisationSteps"] = 1000
         self.parameters["GlobalSeed"] = 1285237
         self.parameters["LogLammps"] = False

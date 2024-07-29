@@ -16,7 +16,7 @@ class Average(TypedDict) :
     
 
 class SGCMC : 
-    def __init__(self, mu_array : np.ndarray, n_species_array : np.ndarray, lammps_worker : LAMMPSWorker, writing_dir : str) -> None :
+    def __init__(self, mu_array : np.ndarray, n_species_array : np.ndarray, lammps_worker : LAMMPSWorker, writing_dir : str, equiv_mu : List[float] = [1.0,2.0]) -> None :
 
         self.worker = lammps_worker
         self.kB = 8.617333262e-5
@@ -25,7 +25,7 @@ class SGCMC :
         self.Natom = self.worker.get_natoms()
         self.n_species_array = n_species_array
 
-
+        self.equiv_mu = [int(id_mu) for id_mu in equiv_mu]
         self.writing_dir = writing_dir
         # debug !
         #np.random.seed(123456)
@@ -49,7 +49,8 @@ class SGCMC :
             New species of the atom id_atom 
         """
         type_array = self.worker.L.gather('type',0,1)
-        type_array[id_atom] = species
+        #type_array[id_atom] = species
+        type_array[id_atom] = self.equiv_mu[species-1]
         self.worker.L.scatter('type',0,1,type_array)
         return 
 
@@ -76,6 +77,7 @@ class SGCMC :
             Old species of the atom number id_atom
         """
         #first we extract the old energy !
+
         if self.old_energy is None : 
             old_energy = self.worker.get_energy()
         else : 
@@ -83,14 +85,18 @@ class SGCMC :
 
         #gather type ! 
         type_array = self.worker.L.gather('type',0,1)
-        old_species = type_array[id_atom]
-         
+        old_species_t = type_array[id_atom]
+
+        old_species = self.equiv_mu.index(old_species_t) + 1
+
         if new_species == old_species : 
+        #if new_species == old_species :
             return 0.0, old_species
 
         else :
             #scatter new type
-            type_array[id_atom] = new_species
+            type_array[id_atom] = self.equiv_mu[new_species-1]
+            #type_array[id_atom] = new_species
             self.worker.L.scatter('type',0,1,type_array)
 
             #new energy
@@ -148,7 +154,6 @@ class SGCMC :
             #swap is accpeted ! 
             self.n_species_array[old_species-1] += -1.0
             self.n_species_array[new_species-1] += 1.0
-
             return 1.0
         
         else :

@@ -94,7 +94,7 @@ class MCManager(BaseManager):
             return new_dic_mu
         
         elif self.parameters.parameters["Mode"] == 'VC-SGC-MC' :
-            restart_file = max([ f'{self.parameters.parameters['WritingDirectory']}/{f}' for f in os.listdir(self.parameters.parameters['WritingDirectory']) ],
+            restart_file = max([ f"{self.parameters.parameters['WritingDirectory']}/{f}" for f in os.listdir(self.parameters.parameters['WritingDirectory']) ],
                                key = os.path.getatime)
             self.parameters.Configuration = restart_file
             lammps_worker.run_script("Input")
@@ -211,17 +211,17 @@ class MCManager(BaseManager):
             npt_script = self.create_npt_script(self.parameters.scripts['NPTScript'])
 
             self.Worker.run_commands(npt_script)
-            self.Worker.run_commands(f'run {self.parameters.parameters['ThermalisationSteps']}')
+            self.Worker.run_commands(f"run {self.parameters.parameters['ThermalisationSteps']}")
 
             for _, grid_mu in dic_mu.items() :  
                 if len(grid_mu) != len(array_species) and self.rank == 0 : 
                     raise TimeoutError('Array of chemical potential and species in the system are inconsistant')
                 
                 # main program 
-                MC_object = SGCMC(grid_mu, array_species, self.Worker, self.parameters.parameters["WritingDirectory"])
+                MC_object = SGCMC(grid_mu, array_species, self.Worker, self.parameters.parameters["WritingDirectory"], equiv_mu=self.parameters.parameters["EquivMu"])
                 nb_main_step = int(self.parameters.parameters['NumberNPTSteps']/self.parameters.parameters['FrequencyMC'])
                 for nb_it in range(nb_main_step) : 
-                    MC_object.perform_lammps_script(f'run {self.parameters.parameters['FrequencyMC']}')
+                    MC_object.perform_lammps_script(f"run {self.parameters.parameters['FrequencyMC']}")
                     _ = MC_object.perform_SGCMC(self.parameters.parameters['FractionSwap'],self.parameters.parameters['Temperature'])
 
                 if self.rank == 0 : 
@@ -250,7 +250,11 @@ class MCManager(BaseManager):
                 print("".join(array_txt)) 
                 self.log("".join(array_txt))
 
+            #npt script
             npt_script = self.create_npt_script(self.parameters.scripts['NPTScript'])
+            self.Worker.run_commands(npt_script)
+            self.Worker.run_commands(f"run {self.parameters.parameters['ThermalisationSteps']}")
+
             VCMC_object = VC_SGCMC(array_mu, array_concentration, array_species, self.parameters.parameters['Kappa'], self.Worker, self.parameters.parameters["WritingDirectory"])
     
 
@@ -258,7 +262,7 @@ class MCManager(BaseManager):
             patched_writing_step = int(self.parameters.parameters['WritingStep']/self.parameters.parameters['FrequencyMC'])
             nb_main_step = int(self.parameters.parameters['NumberNPTSteps']/self.parameters.parameters['FrequencyMC'])
             for nb_it in range(nb_main_step) : 
-                VCMC_object.perform_lammps_script(f'run {self.parameters.parameters['FrequencyMC']}')
+                VCMC_object.perform_lammps_script(f"run {self.parameters.parameters['FrequencyMC']}")
                 _ = VCMC_object.perform_VC_SGCMC(self.parameters.parameters['FractionSwap'],self.parameters.parameters['Temperature'])
 
                 if nb_it%patched_writing_step : 
