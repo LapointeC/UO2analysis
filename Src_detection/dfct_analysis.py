@@ -1,6 +1,8 @@
 import numpy as np
+import more_itertools
 from sklearn.linear_model import LogisticRegression
 from sklearn.covariance import MinCovDet
+from sklearn.mixture import BayesianGaussianMixture
 
 from ase import Atoms, Atom
 
@@ -21,6 +23,7 @@ class DfctAnalysisObject :
     def __init__(self, dbmodel : DBManager, extended_properties : List[str] = None, **kwargs) -> None : 
         self.dic_class : Dict[str,Dict[str,List[Atoms]]] = {}
         self.mcd_model : Dict[str,MinCovDet] = {}
+        self.gmm : Dict[str,BayesianGaussianMixture] = {}
         self.logistic_model : Dict[str,LogisticRegression] = {} 
         self.meta_data_model = []
         self.dfct : Dict[str, Dict[str, Cluster]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
@@ -151,7 +154,7 @@ class DfctAnalysisObject :
             self.mcd_model[species] = models 
         return
 
-    def setting_mcd_model(self, MCD_object : MCDAnalysisObject) -> None : 
+    def setting_gmm_model(self, MCD_object : MCD_analysis_object) -> None : 
         """Loading MCD models from a previous bulk analysis
         
         Parameters:
@@ -161,10 +164,8 @@ class DfctAnalysisObject :
             Filled MCD_analysis_object from a bulk analysis
 
         """
-        def local_mcd_model(species : str, model : MinCovDet) -> None :
-            self.mcd_model[species] = model
-        
-        [ local_mcd_model(species, model) for species, model in MCD_object.mcd_model.items() ]
+        for species in MCD_object.gmm.keys() : 
+            self.gmm[species] = MCD_object.gmm[species] 
         return
 
     def _get_all_atoms_species(self, species : str) -> List[Atoms] : 
@@ -216,6 +217,67 @@ class DfctAnalysisObject :
 
         return list_atoms
 
+    def _get_gmm_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
+        """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
+        
+        Parameters:
+        -----------
+
+        list_atoms : List[Atoms]
+            List of Atoms objects where mcd distance will be computed
+
+        species : str
+            Species associated to list_atoms
+
+            
+        Returns:
+        --------
+
+        List[Atoms]
+            Updated List of Atoms with the new array "mcd-distance"
+        """
+        
+        def mahalanobis_gmm(model : BayesianGaussianMixture, X : np.ndarray) -> np.ndarray : 
+            mean_gmm = model.means_
+            invcov_gmm = model.precisions_
+            array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
+            for i in range(array_distance.shape[1]):
+                array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
+            return array_distance
+
+        for atoms in list_atoms : 
+            gmm_distance = mahalanobis_gmm(self.gmm[species],atoms.get_array('milady-descriptors')) 
+            atoms.set_array('gmm-distance',gmm_distance, dtype=float)
+
+        return list_atoms
+
+    def mahalanobis_gmm(self, model : BayesianGaussianMixture, X : np.ndarray) -> np.ndarray : 
+        """Predict the distance array associated to gaussian mixture. Element i of the array 
+        corresponding to d_i(X) the distance from X to the center of Gaussian i
+        
+        Parameters
+        ----------
+
+        model : BayesianGaussianMixture
+            Gaussian mixture model 
+
+        X : np.ndarray 
+            Data to compute distances 
+
+        Returns 
+        -------
+
+        np.ndarray 
+            Distances array
+
+        """
+        mean_gmm = model.means_
+        invcov_gmm = model.precisions_
+        array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
+        for i in range(array_distance.shape[1]):
+            array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
+        return array_distance
+
     def one_the_fly_mcd_analysis(self, atoms : Atoms) -> Atoms :
         """Build one the fly mcd distances
         
@@ -236,6 +298,32 @@ class DfctAnalysisObject :
 
         return atoms
 
+    def one_the_fly_gmm_analysis(self, atoms : Atoms) -> Atoms :
+        """Build one the fly gmm distances
+        
+        Parameters:
+        -----------
+
+        atoms : Atoms 
+            Atoms object containing a given configuration
+        """
+
+        list_gmmd = []
+        descriptor = atoms.get_array('milady-descriptors')
+        dim_gmm = None 
+        for id_at, at in enumerate(atoms) : 
+            descriptor_at = descriptor[id_at,:].reshape(1,descriptor.shape[1])
+            gmmd = self.mahalanobis_gmm( self.gmm[at.symbol], descriptor_at )
+            if dim_gmm is None : 
+                dim_gmm = gmmd.shape[1]
+
+            list_gmmd += [gmmd]
+        
+        atoms.set_array('gmm-distance',
+                        np.array(list_gmmd).reshape(len(list_gmmd),dim_gmm),
+                        dtype=float)
+
+        return atoms
     
     def _labeling_outlier_atoms(self, atoms : Atoms, dic_nb_dfct : Dict[str,int]) -> Atoms : 
         """Make labelisation of atoms in system depending their energies
@@ -287,7 +375,7 @@ class DfctAnalysisObject :
 
         """
         # sanity check !
-        implemented_properies = {'local-energy':(1,),'atomic-volume':(1,),'coordination':(1,),'mcd-distance':(1,)}
+        implemented_properies = {'local-energy':(1,),'atomic-volume':(1,),'coordination':(1,),'mcd-distance':(1,),'gmm-distance':(1,)}
         for prop in inputs_properties : 
             if prop not in implemented_properies :
                 raise NotImplementedError('{} : this property is not yet implemented'.format(prop))
@@ -295,11 +383,20 @@ class DfctAnalysisObject :
 
         self.logistic_model[species] = LogisticRegression()
         list_species_atoms = self._get_all_atoms_species(species)
-        list_species_atoms = self._get_mcd_distance(list_species_atoms, species)
 
-        Xdata = [ atoms.get_array('label-dfct')[0] for atoms in list_species_atoms]
-        Ytarget = [ [ atoms.get_array(prop)[0] for prop in inputs_properties ] for atoms in list_species_atoms ]
-        
+        if 'mcd-distance' in inputs_properties :
+            list_species_atoms = self._get_mcd_distance(list_species_atoms, species)
+
+        if 'gmm-distance' in inputs_properties : 
+            list_species_atoms = self._get_gmm_distance(list_species_atoms, species)
+
+        Xdata = []
+        Ytarget = []
+        for atoms in list_species_atoms : 
+            Ytarget.append(atoms.get_array('label-dfct')[0])
+            miss_shaped_X = [ atoms.get_array(prop)[0].tolist() for prop in inputs_properties ]
+            Xdata.append(list(more_itertools.collapse(miss_shaped_X)))
+
         Xdata = np.array(Xdata)
         Ytarget = np.array(Ytarget)
         self.logistic_model[species].fit(Xdata,Ytarget)
@@ -315,7 +412,7 @@ class DfctAnalysisObject :
         return self.logistic_model[species].predict_proba(array_desc)
 
     def one_the_fly_logistic_analysis(self, atoms : Atoms) -> Atoms :
-        """Build one the fly mcd distances
+        """Perfrom logistic regression analysis
         
         Parameters:
         -----------
@@ -342,12 +439,18 @@ class DfctAnalysisObject :
                     atoms = self.one_the_fly_mcd_analysis(atoms)
                 if prop == 'atomic-volume' : 
                     atoms= self.compute_Voronoi(atoms)
-            
+                if prop == 'gmm-distance' : 
+                    atoms = self.one_the_fly_gmm_analysis(atoms)
+
             dic_prop[prop] = atoms.get_array(prop)
 
         
-        list_logistic_score = [ self._predict_logistic(at.symbol, np.array([[  dic_prop[prop][id_at] for prop in dic_prop.keys() ]]) ).flatten() \
-                                for id_at, at in enumerate(atoms) ]
+        list_logistic_score = []
+        for id_at, at in enumerate(atoms) :
+            miss_shaped_data = [ dic_prop[prop][id_at].tolist() for prop in dic_prop.keys() ]
+            array_data = np.array([ list(more_itertools.collapse(miss_shaped_data)) ])
+            list_logistic_score.append( self._predict_logistic(at.symbol,array_data).flatten() )
+
         atoms.set_array('logistic-score',
                         np.array(list_logistic_score),
                         dtype=float)

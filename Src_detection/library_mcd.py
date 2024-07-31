@@ -155,6 +155,7 @@ class MCDAnalysisObject :
     def __init__(self, dbmodel : DBManager) -> None : 
         self.dic_class : Dict[str,Dict[str,List[Atoms]]] = {}
         self.mcd_model : Dict[str,MinCovDet]= {}
+        self.gmm : Dict[str,BayesianGaussianMixture] = {}
         self.pca_model : Dict[str,PCA] = {}
         self.distribution : Dict[str,Dict[str,tuple]] = {}
 
@@ -223,7 +224,10 @@ class MCDAnalysisObject :
     def _fit_gaussian_mixture_model(self, list_atoms : List[Atoms], species : str, 
                                     dict_gaussian : dict = {'n_components':2,
                                                             'covariance_type':'full',
-                                                            'init_params':'kmeans'}) -> None : 
+                                                            'init_params':'kmeans', 
+                                                            'max_iter':100,
+                                                            'weight_concentration_prior_type':'dirichlet_process',
+                                                            'weight_concentration_prior':0.5}) -> None : 
         """Build gaussian mixture model for a given species
         
         Parameters:
@@ -240,11 +244,15 @@ class MCDAnalysisObject :
             Dictionnary of parameters for GMM : (i) n_components, (ii) covariance_type and (iii) init_params
 
         """
-        self.mcd_model[species] = BayesianGaussianMixture(n_components=dict_gaussian['n_components'], 
+        self.gmm[species] = BayesianGaussianMixture(n_components=dict_gaussian['n_components'], 
                                                           covariance_type=dict_gaussian['covariance_type'],
-                                                          init_params=dict_gaussian['init_params'])
+                                                          init_params=dict_gaussian['init_params'],
+                                                          max_iter=dict_gaussian['max_iter'],
+                                                          weight_concentration_prior_type=dict_gaussian['weight_concentration_prior_type'],
+                                                          weight_concentration_prior=dict_gaussian['weight_concentration_prior'],
+                                                          n_init=10)
         descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
-        self.mcd_model[species].fit(descriptors_array)
+        self.gmm[species].fit(descriptors_array)
 
     def _get_mcd_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
         """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
@@ -308,18 +316,20 @@ class MCDAnalysisObject :
                 array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
             return array_distance
 
-        for atoms in list_atoms : 
-            gmm_distance = mahalanobis_gmm(self.mcd_model[species],atoms.get_array('milady-descriptors')) 
+        def local_setting_gmm(atoms : Atoms) -> None : 
+            gmm_distance = mahalanobis_gmm(self.gmm[species],atoms.get_array('milady-descriptors')) 
             atoms.set_array('gmm-distance',gmm_distance, dtype=float)
+
+        [local_setting_gmm(atoms) for atoms in list_atoms]
 
         return list_atoms
 
-    def perform_mcd_analysis(self, species : str, contamination : float = 0.05, nb_selected=10000) -> None : 
+    def perform_mcd_analysis(self, species : str, contamination : float = 0.05, nb_bin = 100, nb_selected=10000) -> None : 
         """Perform MCD analysis for a given species"""
         list_atom_species = self._get_all_atoms_species(species)
         print()
         print('... Starting histogram procedure ...')
-        histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=100)
+        histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin)
         list_atom_species = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
         print('... Histogram selection is done ...')
         print()
@@ -366,15 +376,15 @@ class MCDAnalysisObject :
 
         plt.savefig('{:s}_distribution_analysis.pdf'.format(species),dpi=300)
 
-    def perform_gmm_analysis(self, species : str, dict_gaussian : dict = {'n_components':2,
+    def perform_gmm_analysis(self, species : str, nb_bin_histo : int =100, nb_selected :int = 10000, dict_gaussian : dict = {'n_components':2,
                                                             'covariance_type':'full',
                                                             'init_params':'kmeans'}) -> None : 
         """Perform MCD analysis for a given species"""
         list_atom_species = self._get_all_atoms_species(species)
         print()
         print('... Starting histogram procedure ...')
-        histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=100)
-        list_atom_species = histogram_norm_species.histogram_sample(nb_selected=10000)
+        histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin_histo)
+        list_atom_species = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
         print('... Histogram selection is done ...')
         print()
 
@@ -387,17 +397,17 @@ class MCDAnalysisObject :
         #mcd distribution 
         #fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14,6))
         list_gmm = np.array([at.get_array('gmm-distance').flatten() for at in updated_atoms])
-        #print(list_gmm.shape)
+        #print(np.amin(list_gmm),np.argmin(np.abs(list_gmm - np.amin(list_gmm))))
         for k in range(dict_gaussian['n_components']) : 
             mask = k == np.argmin(list_gmm, axis=1)
-            
-            # chi2 distribution
             dist = getattr(scipy.stats, 'chi2')
             param = dist.fit(list_gmm[:,k][mask])
+            #print(param)
             print('DOF for Gaussian {:1d} is {:1.1f}'.format(k+1,param[0]))
             if param[0] > 1.0 :
-                fake_mcd = np.linspace(np.amin(list_gmm[:,k][mask]), np.amax(list_gmm[:,k][mask]), 1000) #
+                fake_mcd = np.linspace(1.2*np.amin(list_gmm[:,k][mask]), np.amax(list_gmm[:,k][mask]), 1000) #
                 axis[k].plot(fake_mcd, dist(*param).pdf(fake_mcd), linewidth=1.5, linestyle='dashed',color='grey')
+            #self.distribution[species] = {'chi2':param}
             
             n, _, patches = axis[k].hist(list_gmm[:,k][mask],density=True,bins=50,alpha=0.7)
             for i in range(len(patches)):
