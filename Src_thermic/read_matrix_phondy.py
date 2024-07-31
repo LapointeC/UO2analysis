@@ -134,10 +134,10 @@ class DataPhondy :
                 print('Something wrong with : {:s}'.format(path_calculation))
 
     def GatherDynamicalMatrix(self, directory : os.PathLike[str], nproc : int = 1, name_matrix : str = '100000.', name_gather_matrix : str = 'dyna') -> None : 
-        u, v, m = self.read_phondy_matrix_multi_proc_draft('{:s}/{:s}'.format(directory,name_matrix), njob=nproc)
-        self.write_binary_file('{:s}.u'.format(name_gather_matrix), 'i4', u)
-        self.write_binary_file('{:s}.v'.format(name_gather_matrix), 'i4', v)
-        self.write_binary_file('{:s}.m'.format(name_gather_matrix), 'f8', m)
+        u, v, m, idx = self.read_phondy_matrix_multi_proc_draft('{:s}/{:s}'.format(directory,name_matrix), njob=nproc)
+        self.write_binary_file('{:s}.u'.format(name_gather_matrix), 'i4', idx, u)
+        self.write_binary_file('{:s}.v'.format(name_gather_matrix), 'i4', idx, v)
+        self.write_binary_file('{:s}.m'.format(name_gather_matrix), 'f8', idx, m)
         return 
 
     def WritePickle(self, path2write : str = './') -> None :
@@ -191,9 +191,11 @@ class DataPhondy :
                     break
         return np.array(list_data)
 
-    def write_binary_file(self, name_file : os.PathLike[str], encoding : str, data : np.ndarray) -> None : 
+    def write_binary_file(self, name_file : os.PathLike[str], encoding : str, index : int, data : np.ndarray) -> None : 
+        binary_idx = struct.pack('i4',index)
         binary_data = struct.pack(encoding,data)
         with open(name_file,'wb') as w :
+            w.write(binary_idx)
             w.write(binary_data)
         return 
 
@@ -266,7 +268,7 @@ class DataPhondy :
         matrix_v = list(itertools.chain.from_iterable(matrix_v))
         matrix_m = list(itertools.chain.from_iterable(matrix_m))
 
-        return np.array(matrix_u), np.array(matrix_v), np.array(matrix_m)
+        return  np.array(matrix_u), np.array(matrix_v), np.array(matrix_m), np.sum(index_list, dtype=np.int32)
 
 #root_dir = '/home/lapointe/WorkML/GenerateThermalConfig/phondy_matrix/para_mat'
 #root_dir = '/home/lapointe/WorkML/GenerateThermalConfig/phondy_matrix/stream_mat'
