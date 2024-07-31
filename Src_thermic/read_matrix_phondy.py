@@ -4,6 +4,7 @@ import os
 import pickle
 import warnings
 import itertools
+import struct
 
 from typing import Dict, TypedDict, List, Tuple, Any
 from scipy.io import FortranFile, _fortran
@@ -112,7 +113,7 @@ class Data(TypedDict) :
     inputs_lammps : str
 
 class DataPhondy : 
-    def __init__(self, root_dir : str) -> None : 
+    def __init__(self, root_dir : os.PathLike[str]) -> None : 
         self.Data : Dict[str,Data] = {}
         self.root_dir = root_dir
     def GenerateDataParallel(self, hdf5 : Group, njob : int = 1) -> None : 
@@ -131,6 +132,13 @@ class DataPhondy :
                 self.UpdateData(path_calculation)
             except : 
                 print('Something wrong with : {:s}'.format(path_calculation))
+
+    def GatherDynamicalMatrix(self, directory : os.PathLike[str], nproc : int = 1, name_matrix : str = '100000.', name_gather_matrix : str = 'dyna') -> None : 
+        u, v, m = self.read_phondy_matrix_multi_proc_draft('{:s}/{:s}'.format(directory,name_matrix), njob=nproc)
+        self.write_binary_file('{:s}.u'.format(name_gather_matrix), 'i4', u)
+        self.write_binary_file('{:s}.v'.format(name_gather_matrix), 'i4', v)
+        self.write_binary_file('{:s}.m'.format(name_gather_matrix), 'f8', m)
+        return 
 
     def WritePickle(self, path2write : str = './') -> None :
         if os.path.exists('{:s}/phondy.pickle'.format(path2write)) : 
@@ -183,6 +191,12 @@ class DataPhondy :
                     break
         return np.array(list_data)
 
+    def write_binary_file(self, name_file : os.PathLike[str], encoding : str, data : np.ndarray) -> None : 
+        binary_data = struct.pack(encoding,data)
+        with open(name_file,'wb') as w :
+            w.write(binary_data)
+        return 
+
     def read_phondy_matrix(self, path : str) -> np.ndarray :   
         matrix_list = glob.glob('{:s}*'.format(path))
 
@@ -200,38 +214,22 @@ class DataPhondy :
 
         return dynamical_matrix
     
-    #def read_bin_multi_proc(self, file : str) -> List[Any] : 
-    #    ext = file[-1]
-    #    fmat = FortranFile(file,'r')
-    #    list_data = []
-    #    #fucking first index ...
-    #    if ext == 'm' :
-    #        _ = fmat.read_ints()
-    #    while True :
-    #        if ext == 'u' or ext == 'v' : 
-    #            try : 
-    #                list_data.append( fmat.read_ints(dtype='int32')[0] )
-    #            except _fortran.FortranEOFError :
-    #                break
-    #        else :
-    #            try : 
-    #                list_data.append(fmat.read_reals(dtype='float64')[0] )
-    #            except _fortran.FortranEOFError : 
-    #                break
-    #    return list_data
     
     def read_bin_multi_proc(self, file : str, idx : int) -> np.ndarray : 
         ext = file[-1]
         f = open(file, 'rb')
         if ext == 'm' : 
             dt_float = np.dtype('f8')
+            np.fromfile(f, dtype=dt_float, offset=4,count=1)
             return np.fromfile(f, dtype=dt_float, offset=4,count=idx)
         if ext == 'u' or ext == 'v' :
             dt_int = np.dtype('i4')
+            np.fromfile(f, dtype=dt_int,count=1)
             return np.fromfile(f, dtype=dt_int,count=idx)
 
     def read_imax(self, file_m : str) -> int : 
         with open(file_m, 'rb') as file:
+            np.fromfile(file, dtype=np.int32, count=1)
             return np.fromfile(file, dtype=np.int32, count=1)[0]
 
     def read_phondy_matrix_multi_proc(self, path : str, njob : int = 1) -> np.ndarray :  
@@ -257,8 +255,22 @@ class DataPhondy :
 
         return dynamical_matrix
     
+    def read_phondy_matrix_multi_proc_draft(self, path : str, njob : int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray] :  
+        matrix_list_m = glob.glob('{:s}/*.m'.format(path))
+        index_list = Parallel(n_jobs=njob)(delayed(self.read_imax)(mat) for mat in matrix_list_m)
+        matrix_m = Parallel(n_jobs=njob)(delayed(self.read_bin_multi_proc)(mat,idx) for idx,mat in list(zip(index_list,matrix_list_m)))
+        matrix_u = Parallel(n_jobs=njob)(delayed(self.read_bin_multi_proc)('{:s}u'.format(mat[:-1]),idx) for idx,mat in list(zip(index_list,matrix_list_m)))
+        matrix_v = Parallel(n_jobs=njob)(delayed(self.read_bin_multi_proc)('{:s}v'.format(mat[:-1]),idx) for idx,mat in list(zip(index_list,matrix_list_m)))
+
+        matrix_u = list(itertools.chain.from_iterable(matrix_u))
+        matrix_v = list(itertools.chain.from_iterable(matrix_v))
+        matrix_m = list(itertools.chain.from_iterable(matrix_m))
+
+        return np.array(matrix_u), np.array(matrix_v), np.array(matrix_m)
+
 #root_dir = '/home/lapointe/WorkML/GenerateThermalConfig/phondy_matrix/para_mat'
-root_dir = '/home/lapointe/WorkML/GenerateThermalConfig/phondy_matrix/stream_mat'
+#root_dir = '/home/lapointe/WorkML/GenerateThermalConfig/phondy_matrix/stream_mat'
+root_dir = '/home/lapointe/WorkML/GenerateThermalConfig/phondy_matrix/mat_JZ'
 file = h5py.File('dynamical.h5', 'w')
 # Create a group for potentials
 dynamical_group = file.create_group('dynamical')

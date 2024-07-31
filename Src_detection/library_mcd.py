@@ -7,6 +7,7 @@ import random
 from ase import Atoms, Atom
 
 from sklearn.covariance import MinCovDet, EllipticEnvelope
+from sklearn.mixture import BayesianGaussianMixture
 from sklearn.decomposition import PCA
 from milady import DBManager
 
@@ -219,6 +220,32 @@ class MCDAnalysisObject :
         descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
         self.mcd_model[species].fit(descriptors_array)
 
+    def _fit_gaussian_mixture_model(self, list_atoms : List[Atoms], species : str, 
+                                    dict_gaussian : dict = {'n_components':2,
+                                                            'covariance_type':'full',
+                                                            'init_params':'kmeans'}) -> None : 
+        """Build gaussian mixture model for a given species
+        
+        Parameters:
+        -----------
+
+        list_atoms : List[Atoms]
+            List of Atoms objects to perform MCD analysis. Each Atoms object containing only 1 Atom with its 
+            associated properties ...
+
+        species : str
+            Selected species 
+
+        dict_gaussian : dict 
+            Dictionnary of parameters for GMM : (i) n_components, (ii) covariance_type and (iii) init_params
+
+        """
+        self.mcd_model[species] = BayesianGaussianMixture(n_components=dict_gaussian['n_components'], 
+                                                          covariance_type=dict_gaussian['covariance_type'],
+                                                          init_params=dict_gaussian['init_params'])
+        descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
+        self.mcd_model[species].fit(descriptors_array)
+
     def _get_mcd_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
         """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
         
@@ -253,6 +280,39 @@ class MCDAnalysisObject :
         descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
         return self.pca_model[species].fit_transform(descriptors_array)
 
+    def _get_gmm_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
+        """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
+        
+        Parameters:
+        -----------
+
+        list_atoms : List[Atoms]
+            List of Atoms objects where mcd distance will be computed
+
+        species : str
+            Species associated to list_atoms
+
+            
+        Returns:
+        --------
+
+        List[Atoms]
+            Updated List of Atoms with the new array "mcd-distance"
+        """
+        
+        def mahalanobis_gmm(model : BayesianGaussianMixture, X : np.ndarray) -> np.ndarray : 
+            mean_gmm = model.means_
+            invcov_gmm = model.precisions_cholesky_
+            array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
+            for i in range(array_distance.shape[1]):
+                array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
+            return array_distance
+
+        for atoms in list_atoms : 
+            gmm_distance = mahalanobis_gmm(self.mcd_model[species],atoms.get_array('milady-descriptors')) 
+            atoms.set_array('gmm-distance',gmm_distance, dtype=float)
+
+        return list_atoms
 
     def perform_mcd_analysis(self, species : str, contamination : float = 0.05, nb_selected=10000) -> None : 
         """Perform MCD analysis for a given species"""
@@ -305,6 +365,48 @@ class MCDAnalysisObject :
         plt.tight_layout()
 
         plt.savefig('{:s}_distribution_analysis.pdf'.format(species),dpi=300)
+
+    def perform_gmm_analysis(self, species : str, dict_gaussian : dict = {'n_components':2,
+                                                            'covariance_type':'full',
+                                                            'init_params':'kmeans'}) -> None : 
+        """Perform MCD analysis for a given species"""
+        list_atom_species = self._get_all_atoms_species(species)
+        print()
+        print('... Starting histogram procedure ...')
+        histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=100)
+        list_atom_species = histogram_norm_species.histogram_sample(nb_selected=10000)
+        print('... Histogram selection is done ...')
+        print()
+
+        print('... Starting GMM fit for {:} atoms ...'.format(species))
+        self._fit_gaussian_mixture_model(list_atom_species, species, dict_gaussian=dict_gaussian)
+        print('... GMM envelop is fitted ...')
+        updated_atoms = self._get_gmm_distance(list_atom_species,species)
+
+        fig, axis = plt.subplots(nrows=1, ncols=dict_gaussian['n_components'], figsize=(14,6))
+        #mcd distribution 
+        #fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14,6))
+        list_gmm = np.array([at.get_array('gmm-distance').flatten() for at in updated_atoms])
+        #print(list_gmm.shape)
+        for k in range(dict_gaussian['n_components']) : 
+            mask = k == np.argmin(list_gmm, axis=1)
+            
+            # chi2 distribution
+            dist = getattr(scipy.stats, 'chi2')
+            param = dist.fit(list_gmm[:,k][mask])
+            print('DOF for Gaussian {:1d} is {:1.1f}'.format(k+1,param[0]))
+            if param[0] > 1.0 :
+                fake_mcd = np.linspace(np.amin(list_gmm[:,k][mask]), np.amax(list_gmm[:,k][mask]), 1000) #
+                axis[k].plot(fake_mcd, dist(*param).pdf(fake_mcd), linewidth=1.5, linestyle='dashed',color='grey')
+            
+            n, _, patches = axis[k].hist(list_gmm[:,k][mask],density=True,bins=50,alpha=0.7)
+            for i in range(len(patches)):
+                patches[i].set_facecolor(plt.cm.viridis(n[i]/max(n)))   
+            axis[k].set_xlabel(r'GMM distance $d^{%s}_{\textrm{GMM}}$ for %s atoms'%(str(k+1),species))
+            axis[k].set_ylabel(r'Probability density')
+        plt.tight_layout()
+
+        plt.savefig('{:s}_gmm_analysis.pdf'.format(species),dpi=300)
 
 #######################################################
     
