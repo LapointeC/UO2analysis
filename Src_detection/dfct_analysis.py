@@ -3,6 +3,7 @@ import more_itertools
 from sklearn.linear_model import LogisticRegression
 from sklearn.covariance import MinCovDet
 from sklearn.mixture import BayesianGaussianMixture
+from sklearn.neighbors import KernelDensity
 
 from ase import Atoms, Atom
 
@@ -25,6 +26,7 @@ class DfctAnalysisObject :
         self.mcd_model : Dict[str,MinCovDet] = {}
         self.gmm : Dict[str,BayesianGaussianMixture] = {}
         self.logistic_model : Dict[str,LogisticRegression] = {} 
+        self.distribution : Dict[str,KernelDensity] = {}
         self.meta_data_model = []
         self.dfct : Dict[str, Dict[str, Cluster]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
 
@@ -152,9 +154,10 @@ class DfctAnalysisObject :
         """
         for species, models in MCD_object.mcd_model.items() : 
             self.mcd_model[species] = models 
+            self.distribution[species] = MCD_object.distribution[species]
         return
 
-    def setting_gmm_model(self, MCD_object : MCD_analysis_object) -> None : 
+    def setting_gmm_model(self, MCD_object : MCDAnalysisObject) -> None : 
         """Loading MCD models from a previous bulk analysis
         
         Parameters:
@@ -164,8 +167,9 @@ class DfctAnalysisObject :
             Filled MCD_analysis_object from a bulk analysis
 
         """
-        for species in MCD_object.gmm.keys() : 
-            self.gmm[species] = MCD_object.gmm[species] 
+        for species, gmm in MCD_object.gmm.items() : 
+            self.gmm[species] = gmm
+            self.distribution[species] = gmm
         return
 
     def _get_all_atoms_species(self, species : str) -> List[Atoms] : 
@@ -288,12 +292,15 @@ class DfctAnalysisObject :
             Atoms object containing a given configuration
         """
 
-        list_mcd = []
         descriptor = atoms.get_array('milady-descriptors')
         list_mcd = [ np.sqrt(self.mcd_model[at.symbol].mahalanobis(descriptor[id_at,:].reshape(1,descriptor.shape[1]))) for id_at, at in enumerate(atoms)  ]
-        
+        list_proba = [ self.distribution[at.symbol].score(list_mcd[id_at]) for id_at, at in enumerate(atoms)]
+
         atoms.set_array('mcd-distance',
                         np.array(list_mcd).reshape(len(list_mcd),),
+                        dtype=float)
+        atoms.set_array('probabilty',
+                        np.array(list_proba).reshape(len(list_proba),),
                         dtype=float)
 
         return atoms
@@ -309,20 +316,25 @@ class DfctAnalysisObject :
         """
 
         list_gmmd = []
+        list_proba = []
         descriptor = atoms.get_array('milady-descriptors')
         dim_gmm = None 
         for id_at, at in enumerate(atoms) : 
             descriptor_at = descriptor[id_at,:].reshape(1,descriptor.shape[1])
             gmmd = self.mahalanobis_gmm( self.gmm[at.symbol], descriptor_at )
+            score = self.gmm[at.symbol].score(descriptor_at)
             if dim_gmm is None : 
                 dim_gmm = gmmd.shape[1]
 
             list_gmmd += [gmmd]
-        
+            list_proba += [score]
+
         atoms.set_array('gmm-distance',
                         np.array(list_gmmd).reshape(len(list_gmmd),dim_gmm),
                         dtype=float)
-
+        atoms.set_array('probability',                        
+                        np.array(list_proba).reshape(len(list_proba),1),
+                        dtype=float)
         return atoms
     
     def _labeling_outlier_atoms(self, atoms : Atoms, dic_nb_dfct : Dict[str,int]) -> Atoms : 
@@ -523,6 +535,7 @@ class DfctAnalysisObject :
         
         max_mcd = np.amax(mcd_distance)
         mean_atomic_volume = np.mean(atomic_volume)
+
 
         # build the mask
         mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume > mean_atomic_volume)

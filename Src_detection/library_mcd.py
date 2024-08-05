@@ -6,9 +6,10 @@ import pickle
 import random
 from ase import Atoms, Atom
 
-from sklearn.covariance import MinCovDet, EllipticEnvelope
+from sklearn.covariance import MinCovDet
 from sklearn.mixture import BayesianGaussianMixture
 from sklearn.decomposition import PCA
+from sklearn.neighbors import KernelDensity
 from milady import DBManager
 
 import scipy.stats
@@ -157,7 +158,7 @@ class MCDAnalysisObject :
         self.mcd_model : Dict[str,MinCovDet]= {}
         self.gmm : Dict[str,BayesianGaussianMixture] = {}
         self.pca_model : Dict[str,PCA] = {}
-        self.distribution : Dict[str,Dict[str,tuple]] = {}
+        self.distribution : Dict[str,KernelDensity] = {}
 
         def fill_dictionnary(at : Atom, id_at : int, descriptors : np.ndarray, dic : Dict[str,List[Atoms]]) -> None : 
             atoms = Atoms([at])          
@@ -253,6 +254,7 @@ class MCDAnalysisObject :
                                                           n_init=10)
         descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
         self.gmm[species].fit(descriptors_array)
+        self.distribution[species] = self.gmm[species]
 
     def _get_mcd_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
         """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
@@ -351,7 +353,10 @@ class MCDAnalysisObject :
         param = dist.fit(list_mcd)
         fake_mcd = np.linspace(np.amin(list_mcd), np.amax(list_mcd), 1000) #
         axis[0].plot(fake_mcd, dist(*param).pdf(fake_mcd), linewidth=1.5, linestyle='dashed',color='grey')
-        self.distribution[species] = {'chi2':param}
+        
+        # kd5 estimation
+        self.distribution[species] = KernelDensity(kernel='gaussian')
+        self.distribution[species].fit(list_mcd)
 
         axis[0].set_xlabel(r'MCD distance $d_{\textrm{MCD}}$ for %s atoms'%(species))
         axis[0].set_ylabel(r'Probability density')

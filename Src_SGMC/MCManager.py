@@ -77,7 +77,7 @@ class MCManager(BaseManager):
             self.log('... You are using restart option ...')
 
         if self.parameters.parameters["Mode"] == 'SGC-MC' : 
-            restart_file = max([ f'{self.parameters.parameters['WritingDirectory']}/{f}' for f in os.listdir(self.parameters.parameters['WritingDirectory']) ],
+            restart_file = max([ f'{self.parameters.parameters["WritingDirectory"]}/{f}' for f in os.listdir(self.parameters.parameters['WritingDirectory']) ],
                                key = os.path.getatime)
             last_mu = extract_numbers(os.path.basename(restart_file))[0]
             if last_mu > 0 :
@@ -218,7 +218,11 @@ class MCManager(BaseManager):
                     raise TimeoutError('Array of chemical potential and species in the system are inconsistant')
                 
                 # main program 
-                MC_object = SGCMC(grid_mu, array_species, self.Worker, self.parameters.parameters["WritingDirectory"], equiv_mu=self.parameters.parameters["EquivMu"])
+                MC_object = SGCMC(grid_mu, 
+                                  array_species, 
+                                  self.Worker, self.parameters.parameters["WritingDirectory"], 
+                                  equiv_mu=self.parameters.parameters["EquivMu"])
+                
                 nb_main_step = int(self.parameters.parameters['NumberNPTSteps']/self.parameters.parameters['FrequencyMC'])
                 for nb_it in range(nb_main_step) : 
                     MC_object.perform_lammps_script(f"run {self.parameters.parameters['FrequencyMC']}")
@@ -255,9 +259,14 @@ class MCManager(BaseManager):
             self.Worker.run_commands(npt_script)
             self.Worker.run_commands(f"run {self.parameters.parameters['ThermalisationSteps']}")
 
-            VCMC_object = VC_SGCMC(array_mu, array_concentration, array_species, self.parameters.parameters['Kappa'], self.Worker, self.parameters.parameters["WritingDirectory"])
+            VCMC_object = VC_SGCMC(array_mu, 
+                                   array_concentration, 
+                                   array_species, 
+                                   self.parameters.parameters['Kappa'],
+                                   self.Worker, 
+                                   self.parameters.parameters["WritingDirectory"],
+                                   equiv_mu=self.parameters.parameters["EquivMu"])
     
-
             # main program 
             patched_writing_step = int(self.parameters.parameters['WritingStep']/self.parameters.parameters['FrequencyMC'])
             nb_main_step = int(self.parameters.parameters['NumberNPTSteps']/self.parameters.parameters['FrequencyMC'])
@@ -265,11 +274,11 @@ class MCManager(BaseManager):
                 VCMC_object.perform_lammps_script(f"run {self.parameters.parameters['FrequencyMC']}")
                 _ = VCMC_object.perform_VC_SGCMC(self.parameters.parameters['FractionSwap'],self.parameters.parameters['Temperature'])
 
-                if nb_it%patched_writing_step : 
-                    VCMC_object.dump_configuration('{:4d}'.format(nb_it))
+                if nb_it%patched_writing_step == 0 : 
+                    VCMC_object.dump_configuration(f'{nb_it}')
                     if self.rank == 0 : 
                         average_c, variance_c = VCMC_object.compute_average()
-                        array_txt = [' {:1.3f} |'.format(c) for c in average_c ] + [' {:1.3f}'.format(np.amax(np.sqrt(variance_c)))]
+                        array_txt = [' {:1.3f} |'.format(c) for c in average_c ] + [' {:1.10f}'.format(np.amax(np.sqrt(variance_c)))]
                         print("".join(array_txt))
                         self.log("".join(array_txt))
         

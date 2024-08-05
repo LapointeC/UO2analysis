@@ -244,10 +244,12 @@ class Fe_data :
 
 class ThermicSampling : 
     """"Thermic sampler object based on previous dynamical matrices calculations"""
-    def __init__(self, dic_size : Dict[str,List[int]], path_npz : str,
+    def __init__(self, dic_size : Dict[str,List[int]], path_data : str,
                  temperature : float, 
                  scaling_factor : Dict[str, float] = None,
-                 nb_sample : int = 1000) -> None : 
+                 nb_sample : int = 1000,
+                 type_data : str = 'npz',
+                 save_diag : bool = False) -> None : 
         
         self.kB = 8.6173303e-5
         self.eV_per_Da_radHz2 = 2.656e-26
@@ -255,10 +257,11 @@ class ThermicSampling :
         self.Fe_data = Fe_data()
 
         self.dic_size = dic_size
-        self.path_npz = path_npz
+        self.path_data = path_data
         self.temperature = temperature
         self.nb_sample = nb_sample
 
+        self.type_data = type_data
         self.atoms_assembly : AtomsAssembly = None
         self.ml_dic : DBDictionnaryBuilder = None
 
@@ -268,21 +271,45 @@ class ThermicSampling :
             else : 
                 self.scaling_factor = scaling_factor
         else : 
-            self.scaling_factor = {key : 1.0 for key in self.dic_size.keys()}
+            self.scaling_factor = None
+            #self.scaling_factor = {key : 0.333 for key in self.dic_size.keys()}
 
-        print('... Reading dynamical matrices ...')
-        self.dict_dynamical_matrix = self.read_npz_file()
+        if self.type_data == 'npz' :
+            self.dict_dynamical_matrix = self.read_npz_file()
+        elif self.type_data == 'hdf5' :
+            self.dict_dynamical_matrix = self.read_hdf5_file()
+        else :
+            raise NotImplementedError('This type of data is not implemented')
+
         print('... Diagonalise dynamical matrices ...')
-        self.diagonalise_dynamical_matrix()
+        self.diagonalise_dynamical_matrix(save=save_diag)
 
-    def read_npz_file(self) -> Dict[str, Dynamical] : 
+    def read_npz_file(self) -> Dict[str, Dynamical] :
         dict_dynamical_matrix : Dict[str, Dynamical] = {}
-        all_file = ['{:}/{:}'.format(self.path_npz,f) for f in os.listdir(self.path_npz)]
+        all_file = ['{:}/{:}'.format(self.path_data,f) for f in os.listdir(self.path_data)]
         list_npz_file = [file for file in all_file if 'npz' in file]
-        for npz in list_npz_file : 
+        for npz in list_npz_file :
             dict_dynamical_matrix[os.path.basename(npz).split('_')[0]] = {'dynamical_matrix':np.load(npz)['arr_0'],
                                                                           'omega2':None,
-                                                                          'xi_matrix':None}
+                                                                          'xi_matrix':None,
+                                                                          'atoms':None}
+        return dict_dynamical_matrix
+
+    def read_hdf5_file(self, sym : str = 'Fe') -> Dict[str, Dynamical] :
+        dict_dynamical_matrix : Dict[str, Dynamical] = {}
+        with h5py.File(self.path_data,'r') as r :
+            dynamical_group = r['dynamical']
+            for key, val in dynamical_group.items() :
+                cell = val['cell'][:,:]
+                positions = val['positions'][:,:]
+                symbol = [sym for _ in range(positions.shape[0] )]
+                dict_dynamical_matrix[key] = {'dynamical_matrix':val['dynamical_matrix'][:,:],
+                                              'omega2':None,
+                                              'xi_matrix':None,
+                                              'atoms':Atoms(symbols=symbol,positions=positions,cell=cell)}
+
+                break
+
         return dict_dynamical_matrix
 
     def CheckFrequencies(self, eigenvalues : np.ndarray, eigenvector : np.ndarray, struc : str) -> Tuple[np.ndarray,bool] : 
@@ -360,7 +387,7 @@ class ThermicSampling :
 
 
         #Temperature renormalisation...
-        T_estimated = np.sum(self.eV_per_Da_radTHz2*mean_mass*omega2_array*np.power(noise_displacement_vector, 2))/(self.kB*len(omega2_array))
+        T_estimated = np.sum(self.eV_per_Da_radTHz2*mass_vector*omega2_array*np.power(noise_displacement_vector, 2))/(self.kB*len(omega2_array))
         #print(' Estimated temperature for the configuration is {:3.2f} K'.format(T_estimated))
 
         #basis change to go back in cartesian !
@@ -395,7 +422,7 @@ class ThermicSampling :
         self.ml_dic = ml_dic
         return
 
-    def build_covariance_estimator(self, path_writing : str = './ml_poscar', symbol : str = 'Fe') :
+    def build_covariance_estimator_basic(self, path_writing : str = './ml_poscar', symbol : str = 'Fe') :
         atoms_assembly = AtomsAssembly()
         for struct in self.dict_dynamical_matrix.keys() :
             print('... Starting convariance estimation for {:}'.format(struct))
@@ -425,10 +452,42 @@ class ThermicSampling :
         self.writer(ml_dic, path_writing)
         return 
 
+    def build_covariance_estimator(self, path_writing : str = './ml_poscar', nb_sigma : float = 1.5) :
+        atoms_assembly = AtomsAssembly()
+        for struct, obj in self.dict_dynamical_matrix.items() :
+            print('... Starting convariance estimation for {:}'.format(struct))
+            atoms_solid = obj['atoms']
+            atoms_solid2keep = atoms_solid.copy()
+            for id_sample in range(self.nb_sample) :
+                
+                if id_sample%(int(0.1*self.nb_sample)) == 0 : 
+                    print(f'    {id_sample} / {self.nb_sample} iterations ...')
+                atoms_k = self.generate_harmonic_thermic_noise(self.temperature,
+                                                     obj['xi_matrix'],
+                                                     obj['omega2'],
+                                                     atoms_solid,
+                                                     scaling_factor= 0.333 if self.scaling_factor is None else self.scaling_factor[struct],
+                                                     sigma_number=nb_sigma)
+                atoms_assembly.update_assembly(struct,atoms_k.copy())
+            displacement_covariance = atoms_assembly.extract_covariance_matrix_atom(struct)
+            atoms_assembly.fill_MLdata(struct,atoms_solid2keep,displacement_covariance)
+
+        print('... Dictionnary object is generated ...')
+        dic_equiv, ml_dic = self.GenerateDBDictionnary(atoms_assembly)
+        self.fill_dictionnaries(atoms_assembly, ml_dic)
+        print(dic_equiv)
+        print('... Writing POSCAR files for Milady ...')
+        if not os.path.exists(path_writing) :
+            os.mkdir(path_writing)
+        else :
+            shutil.rmtree(path_writing)
+            os.mkdir(path_writing)
+        self.writer(ml_dic, path_writing)
+        return
+
     def build_pickle(self, path_pickles : str = './thermic_sampling.pickle') -> None : 
         pickle.dump(self, open(path_pickles,'wb'))
         return
-
 
 class ThermicFiting : 
     def __init__(self) -> None :
@@ -463,7 +522,7 @@ class ThermicFiting :
         return y.T@X@pseudo_inv
 
     def build_regression_models(self, key : str) -> None : 
-        local_models = {}
+        local_models = {i:None for i in range(6)}
         X_key = self.fit_data[key]['array_desc']
         y_key = self.fit_data[key]['array_flat_cov']
         for id in local_models.keys() : 

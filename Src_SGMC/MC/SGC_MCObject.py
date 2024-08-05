@@ -106,6 +106,10 @@ class SGCMC :
             #update old energy
             self.old_energy = new_energy
 
+            #if self.worker.rank == 0 : 
+            #    print(f'{old_species} {new_species} {id_atom} {new_energy - old_energy}')
+
+
             return new_energy - old_energy, old_species
     
     def trial_step_SGCMC(self, id_atom : int, new_species : str | int, temperature : float) -> float : 
@@ -231,6 +235,7 @@ class SGCMC :
         np.ndarray 
             Variance of concentration for each element 
         """
+
         self.average_results['average_concentration'] = self.average_results['sum_concentration']/self.average_results['compt']
         self.average_results['variance_concentration'] = self.average_results['sum_square_concentration']/self.average_results['compt'] - self.average_results['average_concentration']**2
         return self.average_results['average_concentration'], self.average_results['variance_concentration']
@@ -253,11 +258,11 @@ class SGCMC :
 
 
 class VC_SGCMC(SGCMC) : 
-    def __init__(self, mu_array : np.ndarray, concentration_array : np.ndarray, n_species_array : np.ndarray, kappa : float, lammps_worker : LAMMPSWorker, writing_dir : str) -> None :
+    def __init__(self, mu_array : np.ndarray, concentration_array : np.ndarray, n_species_array : np.ndarray, kappa : float, lammps_worker : LAMMPSWorker, writing_dir : str, equiv_mu : List[float] = [1.0, 2.0]) -> None :
 
         self.kappa = kappa
         self.concentration_array = concentration_array
-        super().__init__(mu_array, n_species_array, lammps_worker, writing_dir)
+        super().__init__(mu_array, n_species_array, lammps_worker, writing_dir, equiv_mu=equiv_mu)
 
     
     def trial_step_VC_SGCMC(self, id_atom : int, new_species : str | int, temperature : float) -> float : 
@@ -295,20 +300,20 @@ class VC_SGCMC(SGCMC) :
 
         #Concentration variance constraint
         Natoms = np.sum(self.n_species_array)
-        delta_concentration = (tmp_delta_N_array - self.delta_N_array)/Natoms
+        delta_concentration = tmp_delta_N_array/Natoms
         average_concentration = (2*np.array(self.n_species_array) + tmp_delta_N_array)/(2*Natoms)
-        concentration_constrained = 2*self.kappa*Natoms**2*np.sum(delta_concentration*(average_concentration-self.concentration_array))
-
+        concentration_constrained = 2*self.kappa*(Natoms**2)*np.sum(delta_concentration*(average_concentration-self.concentration_array))
+        
         #CHECK SIGNS !
-        acceptance_criteria = - (deltaE - delta_mu - concentration_constrained)/(self.kB*temperature)
+        acceptance_criteria = - (deltaE - delta_mu + concentration_constrained)/(self.kB*temperature)
         self.delta_N_array = np.zeros(len(self.mu_array))
 
-        #swap is accpeted ! 
         if self.worker.rank == 0 :
             noise = np.log(uniform(0.0,1.0))
         else : 
             noise = None 
 
+        #swap is accpeted ! 
         noise = self.worker.comm.bcast(noise, root=0)
 
         if acceptance_criteria >= noise :
