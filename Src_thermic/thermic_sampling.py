@@ -12,16 +12,22 @@ from milady import DBManager, Optimiser, Regressor, Descriptor, Milady
 from milady_writer import write_milady_poscar
 from tools import nearest_mode
 from sklearn.linear_model import BayesianRidge
+from equivariant_descriptor import FastEquivariantDescriptor
+
+import time
+import h5py
 
 class Dynamical(TypedDict) :
     dynamical_matrix : np.ndarray
     omega2 : np.ndarray
     xi_matrix : np.ndarray
+    atoms : Atoms
 
 class MLdata(TypedDict) : 
     covariance : np.ndarray
     atoms : Atoms
     name_poscar : str
+
 
 class FitData(TypedDict) : 
     array_desc : np.ndarray 
@@ -128,6 +134,7 @@ class AtomsAssembly :
             design_matrix = np.reshape(dic_cov[id], (len(dic_cov[id]),3))
             dic_cov[id] = (design_matrix.T@design_matrix)/(design_matrix.shape[0]-1)
 
+        #print(dic_cov)
         return dic_cov    
     
     def extract_covariance_matrix_atom_array(self, struct : str) -> np.ndarray :
@@ -306,9 +313,10 @@ class ThermicSampling :
                 dict_dynamical_matrix[key] = {'dynamical_matrix':val['dynamical_matrix'][:,:],
                                               'omega2':None,
                                               'xi_matrix':None,
-                                              'atoms':Atoms(symbols=symbol,positions=positions,cell=cell)}
+                                              'atoms':Atoms(symbols=symbol,positions=positions,cell=cell,pbc=[True,True,True])}
 
-                break
+                if len(dict_dynamical_matrix) > 15 : 
+                    break
 
         return dict_dynamical_matrix
 
@@ -323,11 +331,18 @@ class ThermicSampling :
         eigenvalues = eigenvalues[idx_to_keep]
         return eigenvalues, eigenvector, bool_imaginary
 
-    def diagonalise_dynamical_matrix(self) :
+    def diagonalise_dynamical_matrix(self, save : bool = False) :
         key2del = [] 
+        if save : 
+            with h5py.File(self.path_data,'a') as w :
+                dynamical_group = w['dynamical']
+        
         for struct in self.dict_dynamical_matrix.keys() : 
+            start = time.process_time()
             eigen_values, eigen_vectors = np.linalg.eigh(self.dict_dynamical_matrix[struct]['dynamical_matrix'], UPLO='L')
             stable_eigen_values, stable_eigen_vectors, bool_im = self.CheckFrequencies(eigen_values*1.0e4, eigen_vectors, struct)
+            end =  time.process_time()
+            print(f'Diagonalisation time for {struct} matrix is {end-start} s')
             if bool_im : 
                 warnings.warn('Dynamical matrix for {:} presents a problem and will be skiped ...')
                 key2del.append(struct)
@@ -337,6 +352,11 @@ class ThermicSampling :
                 self.dict_dynamical_matrix[struct]['omega2'] = stable_eigen_values
                 self.dict_dynamical_matrix[struct]['xi_matrix'] = stable_eigen_vectors
             
+            # draft save in hdf5 file
+            if save : 
+                dynamical_group[struct].create_dataset("omega2", data=stable_eigen_values, compression="gzip", compression_opts=9)
+                dynamical_group[struct].create_dataset("xi_matrix", data=stable_eigen_vectors, compression="gzip", compression_opts=9)
+
         [self.dict_dynamical_matrix.pop(key) for key in key2del] 
 
     def generate_harmonic_thermic_noise(self, temperature : float, Umatrix : np.ndarray, omega2_array : np.ndarray, atoms : Atoms, scaling_factor : float = 1.0, sigma_number : float = 2.0) -> Atoms :
@@ -365,7 +385,7 @@ class ThermicSampling :
             Updated Atoms object with thermic noise
 
         """
-        mass_array = np.zeros(3*len(atoms))
+        """mass_array = np.zeros(3*len(atoms))
         for id_mass, mass in enumerate(atoms.get_masses()) :
             mass_array[3*id_mass] = mass
             mass_array[3*id_mass+1] = mass
@@ -374,7 +394,12 @@ class ThermicSampling :
         mass_vector = np.zeros(len(omega2_array))
         #mass_nu = sum_ia |xi_ia(v)|^2 m_ia
         for id in range(len(omega2_array)) :
-            mass_vector[id] = np.sum([Umatrix.T[id,k]**2*mass_array[k] for k in range(len(mass_array))])
+            mass_vector[id] = np.sum([Umatrix.T[id,k]**2*mass_array[k] for k in range(len(mass_array))])"""
+
+
+        mass_array = np.repeat(atoms.get_masses(),3)
+        """mass(nu) = sum_ia |xi_ia(v)|^2 m_ia ==> sum_{ia} |U^T_{ia,nu}|^2 m_{ia}"""
+        mass_vector = Umatrix.T**2 @ mass_array
 
         #compute the corresponding quadratic displacement based on equipartion in eigenvector basis 
         omega2_array = np.abs(omega2_array)
@@ -425,7 +450,7 @@ class ThermicSampling :
     def build_covariance_estimator_basic(self, path_writing : str = './ml_poscar', symbol : str = 'Fe') :
         atoms_assembly = AtomsAssembly()
         for struct in self.dict_dynamical_matrix.keys() :
-            print('... Starting convariance estimation for {:}'.format(struct))
+            print('... Starting covariance estimation for {:}'.format(struct))
             solid_ase = SolidAse(self.dic_size[struct],symbol,self.Fe_data.dic_a0[struct])
             atoms_solid = solid_ase.structure(struct)
             atoms_solid2keep = atoms_solid.copy()
@@ -438,6 +463,7 @@ class ThermicSampling :
                 atoms_assembly.update_assembly(struct,atoms_k.copy())
             displacement_covariance = atoms_assembly.extract_covariance_matrix_atom(struct)
             atoms_assembly.fill_MLdata(struct,atoms_solid2keep,displacement_covariance)
+            print()
 
         print('... Dictionnary object is generated ...')
         dic_equiv, ml_dic = self.GenerateDBDictionnary(atoms_assembly)
@@ -455,7 +481,7 @@ class ThermicSampling :
     def build_covariance_estimator(self, path_writing : str = './ml_poscar', nb_sigma : float = 1.5) :
         atoms_assembly = AtomsAssembly()
         for struct, obj in self.dict_dynamical_matrix.items() :
-            print('... Starting convariance estimation for {:}'.format(struct))
+            print('... Starting covariance estimation for {:}'.format(struct))
             atoms_solid = obj['atoms']
             atoms_solid2keep = atoms_solid.copy()
             for id_sample in range(self.nb_sample) :
@@ -471,6 +497,7 @@ class ThermicSampling :
                 atoms_assembly.update_assembly(struct,atoms_k.copy())
             displacement_covariance = atoms_assembly.extract_covariance_matrix_atom(struct)
             atoms_assembly.fill_MLdata(struct,atoms_solid2keep,displacement_covariance)
+            print()
 
         print('... Dictionnary object is generated ...')
         dic_equiv, ml_dic = self.GenerateDBDictionnary(atoms_assembly)
@@ -488,6 +515,7 @@ class ThermicSampling :
     def build_pickle(self, path_pickles : str = './thermic_sampling.pickle') -> None : 
         pickle.dump(self, open(path_pickles,'wb'))
         return
+
 
 class ThermicFiting : 
     def __init__(self) -> None :
@@ -539,13 +567,15 @@ dict_size = {'BCC':[4,4,4],
              'HCP':[4,4,4], 
              'A15':[3,3,3], 
              'C15':[2,2,2]}
-path_npz = '/home/lapointe/WorkML/GenerateThermalConfig/pot_lammps'
-scaling_factor = {'BCC':0.333, 
-             'FCC':0.333, 
-             'HCP':0.333, 
-             'A15':0.333, 
-             'C15':0.333}
+path_data = '../data/dynamical.h5'
+scaling_factor =  None 
+"""{'BCC':0.333, 
+ 'FCC':0.333, 
+ 'HCP':0.333, 
+ 'A15':0.333, 
+ 'C15':0.333}"""
 mode = 'thermic_fiting'
+equivariant = True
 #######################################
 
 
@@ -561,13 +591,14 @@ if mode not in list_mode :
 
 if mode == 'precalculation' :
     thermic_sampler = ThermicSampling(dict_size,
-                                      path_npz,
+                                      path_data,
                                       300.0,
                                       scaling_factor=scaling_factor,
-                                      nb_sample=10000)
-    thermic_sampler.build_covariance_estimator(symbol='Fe')
+                                      nb_sample=1000,
+                                      type_data='hdf5')
+    thermic_sampler.build_covariance_estimator(path_writing='./big_mat_ml_poscar',nb_sigma=1.5)
     print('... Pickle file for thermic covariance will be written ...')
-    thermic_sampler.build_pickle()
+    thermic_sampler.build_pickle(path_pickles='./big_mat_sampling.pkl')
     # milady ! 
     dbmodel = DBManager(model_ini_dict=thermic_sampler.ml_dic)
     print('... All configurations have been embeded in Atoms objects ...')
@@ -593,21 +624,40 @@ if mode == 'precalculation' :
 
 if mode == 'thermic_fiting' : 
     dbmodel : DBManager = pickle.load(open('mld.pickle','rb'))
-    thermic_obj : ThermicSampling = pickle.load(open('thermic_sampling.pickle','rb'))
+    thermic_obj : ThermicSampling = pickle.load(open('big_mat_sampling.pkl','rb'))
 
     fit_obj = ThermicFiting()
 
     print('... Reading structures ...')
-    for struc in dbmodel.model_init_dic.keys() : 
-        descriptor_struct = dbmodel.model_init_dic[struc]['atoms'].get_array('milady-descriptors')
-        print(struc)
-        print([thermic_obj.atoms_assembly.ml_data[key]['name_poscar'] for key in thermic_obj.atoms_assembly.ml_data.keys()])
-        key_cov = [key for key in thermic_obj.atoms_assembly.ml_data.keys() if struc in thermic_obj.atoms_assembly.ml_data[key]['name_poscar']][0]
-        print(' ... {:} structure ...'.format(key_cov))
-        covariance_struct = thermic_obj.atoms_assembly.ml_data[key_cov]['covariance']
-        print(covariance_struct)
-        fit_obj.update_fit_data(key_cov, descriptor_struct, covariance_struct)
-        print(' ... {:} structure is filled ...'.format(key_cov))
+    if equivariant : 
+        equivariant_obj = FastEquivariantDescriptor(dbmodel, rcut=6.0)
+        
+        start = time.process_time()
+        equivariant_obj.BuildEquivariantDescriptors()
+        end =  time.process_time()
+        print(f'Descriptor time for {len(equivariant_obj.configurations)*1028} local env is {end-start} s')
+        configurations = equivariant_obj.GetConfigurations()
+        for struc, config in configurations.items() : 
+            descriptor_struct = config['equiv_descriptor']
+            print(struc)
+            key_cov = [key for key in thermic_obj.atoms_assembly.ml_data.keys() if struc in thermic_obj.atoms_assembly.ml_data[key]['name_poscar']][0]
+            print(' ... {:} structure ...'.format(key_cov))
+            covariance_struct = thermic_obj.atoms_assembly.ml_data[key_cov]['covariance']
+            #print(covariance_struct)
+            fit_obj.update_fit_data(key_cov, descriptor_struct, covariance_struct)
+            print(' ... {:} structure is filled ...'.format(key_cov))
+
+    else :
+        for struc in dbmodel.model_init_dic.keys() : 
+            descriptor_struct = dbmodel.model_init_dic[struc]['atoms'].get_array('milady-descriptors')
+            print(struc)
+            #print([thermic_obj.atoms_assembly.ml_data[key]['name_poscar'] for key in thermic_obj.atoms_assembly.ml_data.keys()])
+            key_cov = [key for key in thermic_obj.atoms_assembly.ml_data.keys() if struc in thermic_obj.atoms_assembly.ml_data[key]['name_poscar']][0]
+            print(' ... {:} structure ...'.format(key_cov))
+            covariance_struct = thermic_obj.atoms_assembly.ml_data[key_cov]['covariance']
+            #print(covariance_struct)
+            fit_obj.update_fit_data(key_cov, descriptor_struct, covariance_struct)
+            print(' ... {:} structure is filled ...'.format(key_cov))
 
     fit_obj.build_regression_models('BCC')
     print(fit_obj.covariance_models)
