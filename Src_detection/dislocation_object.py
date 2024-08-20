@@ -1,16 +1,29 @@
 import warnings
-from typing import Dict, Optional, Tuple
+from typing import Dict, List, Tuple, TypedDict
 
-from ase import Atoms 
+from ase import Atoms, Atom
 from cluster import Cluster, ClusterDislo, LocalLine
 
 import numpy as np
 from scipy.spatial import ConvexHull
 from neighbour import get_N_neighbour
 
+class reference_structure(TypedDict) :
+    """TypedDict class used to compute the Nye tensor"""
+    structure : str
+    unit_cell : np.ndarray
+
 class DislocationObject : 
-    def __init__(self, system : Atoms, rcut : float, structure : str = 'bcc') -> None : 
+    def __init__(self, system : Atoms, 
+                extended_system : Atoms, 
+                full_system : Atoms, 
+                rcut : float, 
+                structure : reference_structure = {'structure':'bcc',
+                                                   'unit_cell':np.eye(3)}) -> None : 
+        
         self.system = system
+        self.extended_system = extended_system
+        self.full_system = full_system
         self.rcut = rcut
         self.structure = structure
         self.convex_hull = self.get_convex_hull()
@@ -35,7 +48,7 @@ class DislocationObject :
     def get_convex_hull(self) -> ConvexHull :
         return ConvexHull(self.system.positions)
 
-    def BuildSamplingLine(self, rcut_line : float = 3.5, rcut_cluster : float = 4.5, scale_cluster : float = 1.5) -> None : 
+    def BuildSamplingLine(self, rcut_line : float = 3.5, rcut_cluster : float = 4.5, scale_cluster : float = 1.5) -> List[int] : 
         if rcut_cluster < rcut_line : 
             raise ValueError(f'Impossible to build lines with rcut_cluster {rcut_cluster} < rcut_line {rcut_line}')
 
@@ -43,52 +56,63 @@ class DislocationObject :
         starting_id = np.argmax( np.linalg.norm(self.system.positions - np.mean(self.system.positions, axis=0), axis=1)  )
         self.starting_point_line = starting_id
 
-        self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[starting_id].position ), starting_id, rcut_cluster)  
+        self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[starting_id].position, self.system[starting_id].symbol ), starting_id, rcut_cluster)  
+
+        tmp_list = [starting_id]
 
         for id_atom_i, at_i in enumerate(self.system) : 
             if id_atom_i == starting_id : 
                 continue
             else : 
                 
-                #index_min_key = np.argmin([ np.linalg.norm(at_i.position - val.size ) for _, val in self.dislocations.items() ])
-                min_dist_array = [ np.amin(np.linalg.norm(at_i.position - cluster.positions, axis=1)) for _,cluster in self.dislocations.items()]
+                min_dist_array = [ np.amin(np.linalg.norm(at_i.position - cluster.atoms_dfct.positions, axis=1)) for _,cluster in self.dislocations.items()]
                 index_min_key = np.argmin(min_dist_array)
                 closest_key = [key for key in self.dislocations.keys()][index_min_key]
+
                 if min_dist_array[index_min_key] > rcut_line :
-                    if self.dislocations[closest_key].get_elliptic_distance(at_i.position) > scale_cluster*self.dislocations[closest_key].size :
+                    tmp_list.append(id_atom_i)
+                    if self.dislocations[closest_key].get_elliptic_distance(at_i) > scale_cluster*self.dislocations[closest_key].size :
                             idx_dislo += 1 
-                            self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[idx_dislo].position ), idx_dislo, rcut_cluster)                        
+                            self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[idx_dislo].position, at_i.symbol ), idx_dislo, rcut_cluster)                        
                     else : 
-                        self.dislocations[index_min_key].append(LocalLine(at_i.position), id_atom_i)
+                        self.dislocations[index_min_key].append(LocalLine(at_i.position, at_i.symbol), id_atom_i)
 
                 else : 
                     continue 
-                
-        return 
+        
+        return tmp_list
     
     def StartingPointCluster(self) -> None :
         for _, cluster in self.dislocations.items(): 
-            starting_id = np.argmax( np.linalg.norm(cluster.positions - cluster.center), axis=1)
-            cluster.starting_point = starting_id
+            composite_id_distance = [(idx, np.linalg.norm(line.center - cluster.center)) for idx, line in cluster.local_lines.items() ]
+            max_id, _ =  sorted(composite_id_distance, key=lambda x: x[1], reverse=True)[0]
+            cluster.starting_point = max_id
         return 
 
 
-    def BuildOrderingLine(self, neighbour : np.ndarray, descriptor : np.ndarray = None, idx_neighbor : np.ndarray = None) -> None :
+    def BuildOrderingLine(self, neighbour : np.ndarray, descriptor : np.ndarray = None, idx_neighbor : np.ndarray = None) -> Atoms :
+        barycenter = Atoms()
+
         for _, cluster in self.dislocations.items():
             weights = np.ones(neighbour.shape[1])
             if descriptor is not None :
                 subset_descriptor = descriptor[idx_neighbor[self.starting_point_line] , :]
                 weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])
 
-            starting_point = np.average( neighbour[cluster.starting_point,:,:], axis=0, weights=weights)
+            #cluster.starting_point = [key for key in cluster.local_lines.keys()][0]
+            starting_point = np.average( neighbour[cluster.starting_point,:,:] + cluster.local_lines[cluster.starting_point].center, axis=0, weights=weights)
+            
+            #debug 
+            barycenter.append(Atom('W',starting_point))
+
             # updating data in local lines for the starting point!
             cluster.local_lines[cluster.starting_point].update_center(starting_point)
-            #self.local_lines[self.starting_point_line].update_neighbour(neighbour[self.starting_point_line,:,:])
+            explored_idx = [cluster.starting_point]
+            cluster.order_line = [cluster.starting_point]
 
-            explored_idx = [self.starting_point_line]
             for _ in range(len(cluster.local_lines) - 1 ) : 
-                sub_local_line = {key:val for key, val in cluster.local_lines if key not in explored_idx}
-                composite_id_distance = [(idx, np.linalg.norm(positions - starting_point)) for idx, positions in sub_local_line if np.linalg.norm(positions - starting_point) > 0.0 ]
+                sub_local_line = {key:val for key, val in cluster.local_lines.items() if key not in explored_idx}
+                composite_id_distance = [(idx, np.linalg.norm(line.center - starting_point)) for idx, line in sub_local_line.items() if np.linalg.norm(line.center - starting_point) > 0.0 ]
                 min_id, _ =  sorted(composite_id_distance, key=lambda x: x[1])[0]
 
                 if descriptor is not None : 
@@ -96,19 +120,56 @@ class DislocationObject :
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])
 
                 explored_idx.append(min_id)
+                cluster.order_line.append(min_id)
                 # build the new starting point for the iterative skim...
-                new_starting_point = np.average( neighbour[min_id,:,:], axis=0, weights=weights)
+                new_starting_point = np.average( neighbour[min_id,:,:] + cluster.local_lines[min_id].center, axis=0, weights=weights)
+                
+                #debug
+                barycenter.append(Atom('W',new_starting_point))
 
                 #updating the local normal from the previous starting point and next id 
                 cluster.local_lines[explored_idx[-1]].update_normal( (new_starting_point - starting_point)/np.linalg.norm(new_starting_point - starting_point) )
+                cluster.local_lines[explored_idx[-1]].update_norm_normal( np.linalg.norm(new_starting_point - starting_point) )
                 cluster.local_lines[explored_idx[-1]].update_next( min_id )
-
+                
                 #updating the new starting point ! 
                 starting_point = new_starting_point
 
-            return
+            return barycenter
 
-    def ComputeBurgerOnLine(self, rcut_burger : float, nye_tensor : np.ndarray, descriptor : np.ndarray = None) -> None : 
+    def LineSmoothing(self, nb_averaging_window : int = 2) -> Atoms : 
+        barycenter = Atoms()
+        for _, cluster in self.dislocations.items():
+            
+            #build the smoothed local line !INDEXES ARE CHANGED AT THIS POINT!
+            for k in range(len(cluster.order_line) - nb_averaging_window) : 
+                species = cluster.local_lines[cluster.order_line[k]].species
+                all_window_positions = np.array([ cluster.local_lines[cluster.order_line[i]].center for i in range(k,k+nb_averaging_window) ])
+                av_localline_obj = LocalLine( np.mean(all_window_positions, axis=0), species)
+                
+                #debug
+                barycenter.append(Atom( symbol=species, position= np.mean(all_window_positions, axis=0)))
+                #smooth line is updated
+                cluster.smooth_local_lines[k] = av_localline_obj
+                cluster.smooth_order_line.append( cluster.order_line[int(0.5*(2*k+nb_averaging_window))] )
+
+            #time to update every normal ...
+            for k in range(len(cluster.smooth_local_lines) -1 ) :
+                local_smooth_normal = (cluster.smooth_local_lines[k+1].center - cluster.smooth_local_lines[k].center)/np.linalg.norm(cluster.smooth_local_lines[k+1].center - cluster.smooth_local_lines[k].center)
+                cluster.smooth_local_lines[k].update_normal( local_smooth_normal )
+                cluster.smooth_local_lines[k].update_norm_normal(np.linalg.norm(cluster.smooth_local_lines[k+1].center - cluster.smooth_local_lines[k].center))
+                cluster.smooth_local_lines[k].update_next(k+1)
+            
+            #last one to update ! 
+            previous_normal = cluster.smooth_local_lines[len(cluster.smooth_local_lines)-2].local_normal
+            previous_norm = cluster.smooth_local_lines[len(cluster.smooth_local_lines)-2].norm_normal
+            cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_normal( previous_normal )
+            cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_norm_normal( previous_norm )
+            cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_next(None)
+
+        return barycenter
+            
+    def ComputeBurgerOnLineDraft(self, rcut_burger : float, nye_tensor : np.ndarray, descriptor : np.ndarray = None) -> None : 
         for _, cluster in self.dislocations.items():
             for id_line in cluster.local_lines.keys() : 
                 center_line = cluster.local_lines[id_line].center
@@ -121,20 +182,36 @@ class DislocationObject :
                     subset_descriptor = descriptor[id_at2keep , :]
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])   
 
-                nye_tensor_id_line = np.average( nye_tensor, weights=weights, axis=0 )
-                sub_convex_hull = ConvexHull(self.convex_hull.vertices[id_at2keep,:])
+                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0 )
+                sub_convex_hull = ConvexHull(self.system.positions[id_at2keep])
 
                 burger_vector_line = nye_tensor_id_line@cluster.local_lines[id_line].local_normal*sub_convex_hull.volume
                 cluster.local_lines[id_line].update_burger(burger_vector_line)
 
         return 
 
-    #def get_local_normal(self,positions : np.ndarray) -> Tuple[np.ndarray,np.ndarray] : 
-    #    centered_positions = positions - np.mean(positions, axis=0)
-    #    _, _, vh = np.linalg.svd(positions - centered_positions, full_matrices=False)
-    #    return vh[-1], centered_positions
+    def ComputeBurgerOnLineSmooth(self, rcut_burger : float, nye_tensor : np.ndarray, descriptor : np.ndarray = None) -> None : 
+        for _, cluster in self.dislocations.items():
+            for id_line in cluster.smooth_local_lines.keys() : 
+                center_line = cluster.smooth_local_lines[id_line].center
+                id_at2keep = [id for id, atom in enumerate(self.system) if np.linalg.norm(atom.position - center_line) < rcut_burger ]
+                if len(id_at2keep) == 0 : 
+                    raise ValueError(f'Number of atom in rcut for id line {id_line} is zero !')
 
-    def NyeTensor(self, theta_max: float = 27) -> Tuple[np.ndarray,np.ndarray,np.ndarray] :
+                weights = np.ones(len(id_at2keep))
+                if descriptor is not None :
+                    subset_descriptor = descriptor[id_at2keep , :]
+                    weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])   
+
+                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0 )
+                sub_convex_hull = ConvexHull(self.system.positions[id_at2keep])
+
+                burger_vector_line = nye_tensor_id_line@cluster.smooth_local_lines[id_line].local_normal*sub_convex_hull.volume
+                cluster.smooth_local_lines[id_line].update_burger(burger_vector_line)
+        return 
+
+
+    def NyeTensor(self, theta_max: float = 27) -> Tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray, np.ndarray] :
 
         """
         Computes strain properties and Nye tensor for a defect containing system.
@@ -145,26 +222,26 @@ class DislocationObject :
         dictionnary_p_vectors = {'bcc':self.p_vector_bcc,
                                  'fcc':self.p_vectors_fcc,
                                  'hcp':self.p_vector_hcp}
-        if not self.structure in dictionnary_p_vectors.keys() : 
+        if not self.structure['structure'] in dictionnary_p_vectors.keys() : 
             raise NotImplementedError(f'This is not implemented : {self.structure}')
         else :
-            p_vectors = dictionnary_p_vectors[self.structure]
+            p_vectors = dictionnary_p_vectors[self.structure['structure']]
+            if len(p_vectors) == 1 :
+                p_vectors = np.broadcast_to( p_vectors@self.structure['unit_cell'], (len(self.extended_system), p_vectors.shape[0], 3))
+            elif len(p_vectors) != len(self.system) :
+                p_vectors = np.broadcast_to( p_vectors@self.structure['unit_cell'], (len(self.extended_system), p_vectors.shape[0], 3))
 
         # Neighbor list setup
         if self.rcut is None :
             raise ValueError('neighbors or cutoff is required')
         else : 
-            #neighbors_ij, neighbors_shift, _ = get_neighborhood(system.positions,
-            #                                                                        cutoff,
-            #                                                                        [True,True,True],
-            #                                                                        system.cell[:],
-            #                                                                        true_self_interaction=False)
 
-
-            array_neighbour, index_array = get_N_neighbour(self.system, 
+            array_neighbour, index_array, array_neighbour_ext, index_array_ext = get_N_neighbour(self.system,
+                                                self.extended_system, 
+                                                self.full_system, 
                                                 self.rcut,
-                                                dictionnary_p_vectors[self.structure],
-                                                pbc=[True, True, True])
+                                                len(dictionnary_p_vectors[self.structure['structure']]),
+                                                pbc=(True, True, True))
 
         # Get cos of theta_max
         cos_theta_max = np.cos(theta_max * np.pi / 180)
@@ -175,19 +252,17 @@ class DislocationObject :
                         [[ 0, 1, 0],[-1, 0, 0],[ 0, 0, 0]]])
 
         # Identify largest number of nearest neighbors
-        #counter = Counter(list(neighbors_ij[0,:]))
-        #nmax = counter[max(counter, key=counter.get)]
         nmax = array_neighbour.shape[1]
 
         # Initialize variables
         nye = np.empty((len(self.system), 3, 3))
         P = np.zeros((nmax, 3))
         Q = np.zeros((nmax, 3))
-        G = np.empty((len(self.system), 3, 3))
+        G = np.empty((len(self.extended_system), 3, 3))
         gradG = np.empty((3, 3, 3))
 
         # Calculate correspondence tensor, G, and strain data for each atom
-        for i in range(len(self.system)):
+        for i in range(len(self.extended_system)):
             p = np.asarray(p_vectors[i])
             if p.ndim == 1:
                 p = np.array([p])
@@ -195,9 +270,7 @@ class DislocationObject :
             r1 = p_mags.min()
 
             # Calculate radial neighbor vectors, q
-            #mask_i = neighbors_ij[0,:] == i
-            #q = system.positions[ neighbors_ij[mask_i][1,:] ] - system.positions[ neighbors_ij[mask_i][0,:] ] + neighbors_shift[mask_i]
-            q = array_neighbour[i,:,:] - self.system.positions[i,:]
+            q = array_neighbour_ext[i,:,:] 
             if q.shape[0] == 1:
                 q = np.array([q])
             q_mags = np.linalg.norm(q, axis=1)
@@ -244,27 +317,30 @@ class DislocationObject :
 
         # Construct the gradient tensor of G, gradG for each atom
         for i in range(len(self.system)):
-            #mask_i = neighbors_ij[0,:] == i
-            #Q = system.positions[ neighbors_ij[mask_i][1,:] ] - system.positions[ neighbors_ij[mask_i][0,:] ] + neighbors_shift[mask_i]
-            #Q = system.dvect(i, neighbors[i])
-            Q = array_neighbour[i,:,:] - self.system.positions[i,:]
+            Q = array_neighbour[i,:,:]
             if Q.shape[0] == 1:
                 Q = np.array([Q])
-            dG = G[list(index_array[i])] - G[i]
+            
+            dG = G[index_array[i]] - G[i]
             for x in range(3):
                 gradG[x,:] = np.linalg.lstsq(Q, dG[:,x,:], rcond=None)[0].T
 
             # Use gradG to calculate the nye tensor
             nye[i] = -1*np.einsum('ijm,ikm->jk', eps, gradG)
 
-        return nye, array_neighbour, index_array
+        return nye, array_neighbour, index_array, array_neighbour_ext, index_array_ext
 
 
 
-    def BuildDislocation(self, rcut_line : float, rcut_burger : float, descritpor : np.ndarray = None) : 
-        Nye_tensor, array_neighbour, index_neighbour = self.NyeTensor()
+    def BuildDislocation(self, rcut_line : float, rcut_burger : float, descritpor : np.ndarray = None, smoothing_line : dict = None) : 
+        Nye_tensor, array_neighbour, index_neighbour, array_neighbour_ext, index_neighbour_ext = self.NyeTensor()
         self.BuildSamplingLine(rcut_line=rcut_line)
         self.StartingPointCluster()
-        self.BuildOrderingLine(array_neighbour, descriptor=descritpor, idx_neighbor=index_neighbour)
-        self.ComputeBurgerOnLine(rcut_burger, Nye_tensor, descriptor=descritpor)
+        self.BuildOrderingLine(array_neighbour, descriptor=descritpor, idx_neighbor=index_neighbour_ext)
+        if smoothing_line is not None : 
+            self.LineSmoothing(nb_averaging_window=smoothing_line['nb_averaging_window'])
+            self.ComputeBurgerOnLineSmooth(rcut_burger, Nye_tensor, descriptor=descritpor)
+        else :
+            self.ComputeBurgerOnLineDraft(rcut_burger, Nye_tensor, descriptor=descritpor)
+        
         return 

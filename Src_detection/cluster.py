@@ -36,6 +36,7 @@ class Cluster :
         self.rcut = rcut
         self.size = rcut
         self.elliptic = (1.0/(self.size**2))*np.eye(3)
+        self.backup_elliptic = (1.0/(self.size**2))*np.eye(3)
         self.center = self.atoms_dfct.positions
 
     def append(self, atom : Atom, array_property : Dict[str,Any] = {}, elliptic : str ='iso') -> None : 
@@ -71,14 +72,16 @@ class Cluster :
         """Distance covariance estimatior for isotropic clusters"""
         self.elliptic = (1.0/(self.size**2))*np.eye(3)
     
-    def _anistropic_extension(self) -> None : 
+    def _anistropic_extension(self, regularisation : float = 0.0) -> None : 
         """Distance covariance estimatior for anisotropic clusters"""
-        covariance = (self.atoms_dfct.positions - self.center).T@(self.atoms_dfct.positions - self.center)
-        self.elliptic = np.linalg.pinv(covariance)
+        covariance = (self.atoms_dfct.positions - self.center).T@(self.atoms_dfct.positions - self.center)/(self.atoms_dfct.positions.shape[0] - 1)
+        self.elliptic = np.linalg.pinv(covariance + regularisation*np.eye(covariance.shape[0]))
 
         # check the minimal isotropic raduis for each direction
         for i in range(self.elliptic.shape[0]) : 
             if self.elliptic[i,i] > 1.0/(self.rcut**2) :
+                self.elliptic[i,:] = 0.0
+                self.elliptic[:,i] = 0.0
                 self.elliptic[i,i] = 1.0/(self.rcut**2)
 
     def get_elliptic_distance(self, atom : Atom) -> float :
@@ -125,6 +128,7 @@ class LocalLine :
         self.local_burger = None
         self.local_normal = None
         self.next = None
+        self.norm_normal = None
 
     def update_center(self, center : np.ndarray) -> None : 
         self.center = center
@@ -138,6 +142,10 @@ class LocalLine :
         self.local_normal = normal
         return 
     
+    def update_norm_normal(self, norm : float) -> None : 
+        self.norm_normal = norm
+        return 
+
     def update_next(self, next_id : int ) -> None : 
         self.next = next_id 
         return 
@@ -147,9 +155,12 @@ class ClusterDislo(Cluster) :
         self.local_lines = {id_line_init:local_line_init}
         self.center = local_line_init.center
         self.positions = local_line_init.center
-
-        self.starting_point = None 
-        super.__init__(Atom(local_line_init.species,local_line_init.center), rcut_cluster)
+        
+        self.order_line = []
+        self.starting_point = None
+        self.smooth_local_lines : Dict[int,LocalLine] = {}
+        self.smooth_order_line = [] 
+        super().__init__(Atom(local_line_init.species,local_line_init.center), rcut_cluster)
 
     def append(self, local_line : LocalLine, id_line : int) -> None : 
         """Append new atom in the cluster
@@ -166,7 +177,7 @@ class ClusterDislo(Cluster) :
         """       
         self.local_lines[id_line] = local_line
         self.atoms_dfct.append( Atom(local_line.species, local_line.center) )
-        self.center = self.atoms_dfct.get_center_of_mass()
+        self.center = self.atoms_dfct.get_center_of_mass().reshape((1,3))
         self._anistropic_extension()
         return 
     
