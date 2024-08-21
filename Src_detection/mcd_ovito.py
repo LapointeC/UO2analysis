@@ -9,7 +9,7 @@ from matplotlib import colors
 from ovito.io.ase import ase_to_ovito
 from ovito.pipeline import PipelineSourceInterface
 from ovito.io import *
-from ovito.data import DataCollection
+from ovito.data import DataCollection, Lines
 
 ########################################################
 ## FRAME INTERFACE FOR OVITO
@@ -30,6 +30,48 @@ class FrameOvito(PipelineSourceInterface) :
         data_atoms : DataCollection = ase_to_ovito(self.list_atoms[frame])
         data.particles = data_atoms.particles
         data.cell = data_atoms.cell
+
+class NaiveOvitoModifier : 
+    """Naive ```OvitoModifier``` for debug ..."""
+    def __init__(self, dict_transparency : dict = None, dict_color : dict = None, array_line : np.ndarray = None) -> None : 
+        if dict_transparency is None or dict_color is None : 
+            raise TimeoutError('Some dictionnaries are set to None ...')
+
+        self.dict_transparency = dict_transparency
+        self.dict_color = dict_color
+        self.array_line = array_line
+
+    def _build_rgb_dict(self) -> None : 
+        self.dic_rgb = {}
+        for key in self.dict_color.keys() :
+            self.dic_rgb[key] = colors.to_rgb(self.dict_color[key])
+
+    def BuildArrays(self, frame : int , data : DataCollection) -> None : 
+        def builder(dict : dict, data : DataCollection, type = 'color') -> np.ndarray : 
+            if type == 'color' : 
+                init_array = np.ones((len(data.particles['Particle Type'][:]),3))
+            else :
+                init_array = np.full(len(data.particles['Particle Type'][:]),1.0)
+            
+            for key, val in dict.items() : 
+                if type == 'color' : 
+                    init_array[val] = colors.to_rgb(key)
+                else : 
+                    init_array[val] = key
+
+            return init_array
+
+        self.array_color = builder(self.dict_color, data, type ='color')
+        self.array_transparency = builder(self.dict_transparency, data, type ='transparency')
+
+        data.particles_.create_property('Color',data=self.array_color)
+        data.particles_.create_property('Transparency',data=self.array_transparency)
+        
+        if self.array_line is not None : 
+            lines = data.lines.create(identifier='myline', positions=self.array_line)
+            lines.vis.color = colors.to_rgb('chartreuse')
+            lines.vis.width = 0.5 #(color=colors.to_rgb('chartreuse'), width=1.0)
+            #data.lines_.create_property('Color',data=self.array_color) 
 
 class MCDModifier :
     """Ovito modifier function for visual logistic selection"""
