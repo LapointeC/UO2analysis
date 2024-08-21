@@ -2,7 +2,7 @@ import warnings
 from typing import Dict, List, Tuple, TypedDict
 
 from ase import Atoms, Atom
-from cluster import Cluster, ClusterDislo, LocalLine
+from cluster import ClusterDislo, LocalLine
 
 import numpy as np
 from scipy.spatial import ConvexHull
@@ -14,13 +14,45 @@ class reference_structure(TypedDict) :
     unit_cell : np.ndarray
 
 class DislocationObject : 
+    """DislocationObject class used to find and compute properties for a given subset of Atoms systems
+    Main properties which are globally computed : (i) the Nye tensor and (ii) the dictionnary dislocation ```Dict[str,ClusterDislo]```.
+
+    Each key of dislocation dictionnary contains ```ClusterDislo``` object which allows to compute local properties associated to each ```Cluster```
+    The local properties are stored in ```LocalLine``` object which contains : (i) ```local_normal``` , (ii) ```local_burger``` (computed with Nye tensor).
+    ```local_normal``` and ```local_burger``` allow to reconstruct dislocation properties ...
+     
+    """
     def __init__(self, system : Atoms, 
                 extended_system : Atoms, 
                 full_system : Atoms, 
                 rcut : float, 
                 structure : reference_structure = {'structure':'bcc',
-                                                   'unit_cell':np.eye(3)}) -> None : 
-        
+                                                   'unit_cell':3.1855*np.eye(3)}) -> None : 
+        """Init method for ```DislocationObject```. Nye tensor calculation needs to used two buffer region for the system
+        which are called ```extended_system``` and ```full_system```. Rigourisly only ```extended_system``` is needed to compute deformation
+        tensor and ```full_system``` is need to evaluate gradient of the deformation tensor needed to estimate Nye tensor !
+
+        Parameters:
+        -----------
+
+        system : Atoms 
+            System to compute the Dislocation properties
+
+        extended_system : Atoms 
+            First buffer system needed to evaluate Nye tensor
+
+        full_system : Atoms 
+            Second buffer system needed to evaluate deformation tensor
+
+        rcut : float 
+            Cutoff raduis to compute neightborhood (in AA)
+
+        structure : reference_structure
+            Dictionnary needed to build the deformation tensor based on reference lattice. 
+            Two key are needed in this dictionnary : (i) ```structure``` the cristallographic reference structure and (ii) ```unit_cell``` unit cell of the cristallographic reference 
+
+        """
+
         self.system = system
         self.extended_system = extended_system
         self.full_system = full_system
@@ -31,6 +63,7 @@ class DislocationObject :
         self.dislocations : Dict[str,ClusterDislo] = {}
         self.starting_point_line = None
 
+        # reference cristallographic neighbours vector (unit coordinate) for traditionnal lattices 
         self.p_vectors_fcc = np.array([[ 0.5, 0.5, 0.0], [ 0.5, 0.0, 0.5], [ 0.0, 0.5, 0.5],
                                      [-0.5, 0.5, 0.0], [-0.5, 0.0, 0.5], [ 0.0,-0.5, 0.5],
                                      [ 0.5,-0.5, 0.0], [ 0.5, 0.0,-0.5], [ 0.0, 0.5,-0.5],
@@ -46,36 +79,72 @@ class DislocationObject :
                                   [1.15470054, 0.0, 0.815]  ])
 
     def get_convex_hull(self) -> ConvexHull :
+        """Build the 3D convex hull for the whole system 
+        
+        Returns:
+        --------
+
+        ConvexHull
+            Associated ConvexHull object
+        """
         return ConvexHull(self.system.positions)
 
-    def BuildSamplingLine(self, rcut_line : float = 3.5, rcut_cluster : float = 4.5, scale_cluster : float = 1.5) -> List[int] : 
+    def BuildSamplingLine(self, rcut_line : float = 3.5, 
+                          rcut_cluster : float = 4.5, 
+                          scale_cluster : float = 1.5) -> List[int] : 
+        
+        """Build a sample line to generate the dislocation line. In order to build an efficient an accurate line, 
+        selected atoms have to be sufficiently far to the previous one
+        
+        Parameters:
+        -----------
+
+        rcut_line : float 
+            Rcut in to be added in a ```ClusterDislo```
+
+        rcut_cluster : float 
+            Initial size of the each ```ClusterDislo``` (see the documentation)
+
+        scale_custer : float 
+            Scale parameter for  ```ClusterDislo``` (see the documentation)
+
+        Returns:
+        --------
+
+        List[int]
+            Indexes of atoms in the sample line (used for debug)
+        """
         if rcut_cluster < rcut_line : 
             raise ValueError(f'Impossible to build lines with rcut_cluster {rcut_cluster} < rcut_line {rcut_line}')
 
+        #here is the initialisation step. We first select the farest atom to the system barycenter
         idx_dislo = 0
         starting_id = np.argmax( np.linalg.norm(self.system.positions - np.mean(self.system.positions, axis=0), axis=1)  )
         self.starting_point_line = starting_id
-
         self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[starting_id].position, self.system[starting_id].symbol ), starting_id, rcut_cluster)  
 
+        #debug
         tmp_list = [starting_id]
 
         for id_atom_i, at_i in enumerate(self.system) : 
             if id_atom_i == starting_id : 
                 continue
             else : 
-                
+                #Find the nearest ClusterDislo to the at_i
                 min_dist_array = [ np.amin(np.linalg.norm(at_i.position - cluster.atoms_dfct.positions, axis=1)) for _,cluster in self.dislocations.items()]
                 index_min_key = np.argmin(min_dist_array)
                 closest_key = [key for key in self.dislocations.keys()][index_min_key]
 
+                #at_i have to be sufficiently far from the cluster to build an accurate dislocation line 
                 if min_dist_array[index_min_key] > rcut_line :
                     tmp_list.append(id_atom_i)
+                    #if at_i is far enough to the closest ClusterDislo, we create a new cluster 
                     if self.dislocations[closest_key].get_elliptic_distance(at_i) > scale_cluster*self.dislocations[closest_key].size :
                             idx_dislo += 1 
                             self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[idx_dislo].position, at_i.symbol ), idx_dislo, rcut_cluster)                        
+                    #otherwise we aggregate at_i to the closest ClusterDislo
                     else : 
-                        self.dislocations[index_min_key].append(LocalLine(at_i.position, at_i.symbol), id_atom_i)
+                        self.dislocations[index_min_key].append_dislo(LocalLine(at_i.position, at_i.symbol), id_atom_i)
 
                 else : 
                     continue 
@@ -83,6 +152,8 @@ class DislocationObject :
         return tmp_list
     
     def StartingPointCluster(self) -> None :
+        """Build the starting point local dislocation line for each ```ClusterDislo```. 
+        Starting point of each cluster is chosen to be the farest of the center of the cluster"""
         for _, cluster in self.dislocations.items(): 
             composite_id_distance = [(idx, np.linalg.norm(line.center - cluster.center)) for idx, line in cluster.local_lines.items() ]
             max_id, _ =  sorted(composite_id_distance, key=lambda x: x[1], reverse=True)[0]
@@ -90,16 +161,42 @@ class DislocationObject :
         return 
 
 
-    def BuildOrderingLine(self, neighbour : np.ndarray, descriptor : np.ndarray = None, idx_neighbor : np.ndarray = None) -> Atoms :
-        barycenter = Atoms()
+    def BuildOrderingLine(self, neighbour : np.ndarray, 
+                          descriptor : np.ndarray = None, 
+                          idx_neighbor : np.ndarray = None) -> Atoms :
+        """This method allows to order the ```LocalLine``` by explicitely construct the dislocation line. 
+        The dislocation line is so computed at each  ```LocalLine``` object. If descriptor are not None, they are used 
+        to compute realistic barycenter for the dislocation : 
+            
+            $q_{local_line,i} = \sum_{j \in neigh(i) q_{local_line,j}} \frac{e^{\Vert D_{local_line,j} \Vert}}{ sum_{j' \in neigh(i) q_{local_line,j'} e^{\Vert D_{local_line,j'} \Vert}}  }  $
 
+
+        Parameters:
+        -----------
+
+        neighour : np.ndarray 
+            array of neighbours for EXTENDED_SYSTEM (M,N,3) for each line i -> { r_{neigh_i,n} - r_i }_{1 \leq n \leq N} (cartesian)
+        
+        descriptor : np.ndarray
+            descriptor vector associated to the FULL_SYSTEM
+
+        idx_neighbor : np.ndarray 
+            array of index of neighbours for EXTENDED_ATOMS SYSTEM (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
+        
+        Returns:
+        --------
+
+        Atoms 
+            Coordinate of the whole point part of the line (used for debug)
+        """
+        
+        barycenter = Atoms()
         for _, cluster in self.dislocations.items():
             weights = np.ones(neighbour.shape[1])
             if descriptor is not None :
                 subset_descriptor = descriptor[idx_neighbor[self.starting_point_line] , :]
                 weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])
 
-            #cluster.starting_point = [key for key in cluster.local_lines.keys()][0]
             starting_point = np.average( neighbour[cluster.starting_point,:,:] + cluster.local_lines[cluster.starting_point].center, axis=0, weights=weights)
             
             #debug 
@@ -111,6 +208,7 @@ class DislocationObject :
             cluster.order_line = [cluster.starting_point]
 
             for _ in range(len(cluster.local_lines) - 1 ) : 
+                #build the sub_local_line dictionnary which excluded the previously explored points
                 sub_local_line = {key:val for key, val in cluster.local_lines.items() if key not in explored_idx}
                 composite_id_distance = [(idx, np.linalg.norm(line.center - starting_point)) for idx, line in sub_local_line.items() if np.linalg.norm(line.center - starting_point) > 0.0 ]
                 min_id, _ =  sorted(composite_id_distance, key=lambda x: x[1])[0]
@@ -119,6 +217,7 @@ class DislocationObject :
                     subset_descriptor = descriptor[idx_neighbor[min_id] , :]
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])
 
+                #find the next previous point of the local line
                 explored_idx.append(min_id)
                 cluster.order_line.append(min_id)
                 # build the new starting point for the iterative skim...
@@ -138,6 +237,24 @@ class DislocationObject :
             return barycenter
 
     def LineSmoothing(self, nb_averaging_window : int = 2) -> Atoms : 
+        """Allows to smooth the dislocation line based on BuildOrderingLine method. 
+        The previous dislocation line is smoothed by averaging window (in cartesian space) with other point which are part of the previous line
+        This method create a new ```ClusterDislo``` attribute called ```smooth_local_lines``` which have the same structure than ```local_lines```
+
+
+        Parameters:
+        -----------
+
+        nb_averaging_window : int
+            Size of the averaging window 
+        
+        Returns:
+        --------
+
+        Atoms 
+            Coordinate of the whole point part of the smooth line (used for debug)
+        """
+        
         barycenter = Atoms()
         for _, cluster in self.dislocations.items():
             
@@ -169,7 +286,25 @@ class DislocationObject :
 
         return barycenter
             
-    def ComputeBurgerOnLineDraft(self, rcut_burger : float, nye_tensor : np.ndarray, descriptor : np.ndarray = None) -> None : 
+    def ComputeBurgerOnLineDraft(self, rcut_burger : float, 
+                                 nye_tensor : np.ndarray, 
+                                 descriptor : np.ndarray = None) -> None : 
+        """Compute the local burger vector for each point of the ```local_line```. If descriptor is not None, the 
+        same reweighting procedure than in BuildOrderingLine is used to compute the local average Nye tensor
+        
+        Paramters:
+        ----------
+
+        rcut_burger : float 
+            Cutoff raduis to average Nye tensor (in AA)
+
+        nye_tensor : np.ndarray 
+            Nye tensor associated to the whole ```system```
+
+        descriptor : np.ndarray 
+            descriptor vector associated to the ```system```
+
+        """
         for _, cluster in self.dislocations.items():
             for id_line in cluster.local_lines.keys() : 
                 center_line = cluster.local_lines[id_line].center
@@ -191,6 +326,23 @@ class DislocationObject :
         return 
 
     def ComputeBurgerOnLineSmooth(self, rcut_burger : float, nye_tensor : np.ndarray, descriptor : np.ndarray = None) -> None : 
+        """Compute the local burger vector for each point of the ```smooth_local_line```. If descriptor is not None, the 
+        same reweighting procedure than in BuildOrderingLine is used to compute the local average Nye tensor
+        
+        Paramters:
+        ----------
+
+        rcut_burger : float 
+            Cutoff raduis to average Nye tensor (in AA)
+
+        nye_tensor : np.ndarray 
+            Nye tensor associated to the whole ```system```
+
+        descriptor : np.ndarray 
+            descriptor vector associated to the ```system```
+
+        """
+        
         for _, cluster in self.dislocations.items():
             for id_line in cluster.smooth_local_lines.keys() : 
                 center_line = cluster.smooth_local_lines[id_line].center
@@ -211,14 +363,38 @@ class DislocationObject :
         return 
 
 
-    def NyeTensor(self, theta_max: float = 27) -> Tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray, np.ndarray] :
+    def NyeTensor(self, theta_max: float = 27) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] :
+        """Computes strain properties and Nye tensor for ```system``` object. As described in the ```__init__``` documentation, 
+        Nye tensor calculation need to used two buffer region : (i) ```extended_system``` and (ii) ```full_atoms```. 
+
+        !ADD THE REFERENCE FOR THE ROUTINE!
+
+        Parameters:
+        -----------
+        
+        theta_max : float
+            Number of angle used to compute Nye tensor 
+
+        Returns:
+        --------
+        
+        np.ndarray 
+            Nye tensor for the whole ```system```
+
+        np.ndarray 
+            array of neighbours for ```system``` (M,N,3) for each line i -> { r_{neigh_i,n} - r_i }_{1 \leq n \leq N} (cartesian)
+
+        np.ndarray 
+            array of index of neighbours for ```system``` (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
+
+        np.ndarray 
+            array of neighbours for ```extended_system``` (M,N,3) for each line i -> { r_{neigh_i,n} - r_i }_{1 \leq n \leq N} (cartesian)
+
+        np.ndarray 
+            array of index of neighbours for ```extended_system``` (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
 
         """
-        Computes strain properties and Nye tensor for a defect containing system.
 
-        Parameters
-        TO DO
-        """
         dictionnary_p_vectors = {'bcc':self.p_vector_bcc,
                                  'fcc':self.p_vectors_fcc,
                                  'hcp':self.p_vector_hcp}
@@ -331,12 +507,40 @@ class DislocationObject :
         return nye, array_neighbour, index_array, array_neighbour_ext, index_array_ext
 
 
+    def BuildDislocations(self, rcut_line : float, 
+                         rcut_burger : float, 
+                         rcut_cluster : float,
+                         scale_cluster : float,
+                         descritpor : np.ndarray = None, 
+                         smoothing_line : dict = None) -> None :
+        """Full procedure method to build all the local dislocation properties...
+        
+        Parameters:
+        -----------
 
-    def BuildDislocation(self, rcut_line : float, rcut_burger : float, descritpor : np.ndarray = None, smoothing_line : dict = None) : 
-        Nye_tensor, array_neighbour, index_neighbour, array_neighbour_ext, index_neighbour_ext = self.NyeTensor()
-        self.BuildSamplingLine(rcut_line=rcut_line)
+        rcut_line : float 
+            Rcut in to be added in a ```ClusterDislo```
+
+        rcut_burger : float 
+            Cutoff raduis to average Nye tensor (in AA)
+        
+        rcut_cluster : float 
+            Initial size of the each ```ClusterDislo``` (see the documentation)
+
+        scale_custer : float 
+            Scale parameter for  ```ClusterDislo``` (see the documentation)
+        
+        descriptor : np.ndarray 
+            descriptor vector associated to the ```system```
+
+        smoothing_line : dict 
+            If smoothing line is not None, smoothing procedure is used and need nb_averaging_window key (see LineSmoothing method)
+        """
+
+        Nye_tensor, _, _, array_neighbour_ext, index_neighbour_ext = self.NyeTensor()
+        self.BuildSamplingLine(rcut_line=rcut_line, rcut_cluster=rcut_cluster, scale_cluster=scale_cluster)
         self.StartingPointCluster()
-        self.BuildOrderingLine(array_neighbour, descriptor=descritpor, idx_neighbor=index_neighbour_ext)
+        self.BuildOrderingLine(array_neighbour_ext, descriptor=descritpor, idx_neighbor=index_neighbour_ext)
         if smoothing_line is not None : 
             self.LineSmoothing(nb_averaging_window=smoothing_line['nb_averaging_window'])
             self.ComputeBurgerOnLineSmooth(rcut_burger, Nye_tensor, descriptor=descritpor)

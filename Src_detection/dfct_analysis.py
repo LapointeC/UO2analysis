@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import more_itertools
 from sklearn.linear_model import LogisticRegression
 from sklearn.covariance import MinCovDet
@@ -7,12 +8,13 @@ from sklearn.neighbors import KernelDensity
 
 from ase import Atoms, Atom
 
-from typing import Dict, List , Any, TypedDict
+from typing import Dict, List , Any
 from library_mcd import DBManager, MCDAnalysisObject
 from cluster import Cluster, ClusterDislo
+from dislocation_object import DislocationObject, reference_structure
 
 from ovito.io.ase import ase_to_ovito
-from ovito.modifiers import VoronoiAnalysisModifier, DislocationAnalysisModifier
+from ovito.modifiers import VoronoiAnalysisModifier, DislocationAnalysisModifier, CoordinationAnalysisModifier
 from ovito.pipeline import StaticSource, Pipeline
 
 
@@ -28,7 +30,9 @@ class DfctAnalysisObject :
         self.logistic_model : Dict[str,LogisticRegression] = {} 
         self.distribution : Dict[str,KernelDensity] = {}
         self.meta_data_model = []
-        self.dfct : Dict[str, Dict[str, Cluster]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
+        self.dfct : Dict[str, Dict[str, Cluster | ClusterDislo]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
+
+        self.mean_atomic_volume = None 
 
         def fill_dictionnary(key : str, at : Atom, id_at : int, descriptors : np.ndarray, extended_properties : List[str], dic : Dict[str,List[Atoms]]) -> None : 
             atoms = Atoms([at])          
@@ -112,9 +116,75 @@ class DfctAnalysisObject :
         
         return atoms
 
-    def DXA_analysis(self, atoms : Atoms, lattice_type : str, list_type : List[int], param_dxa : Dict[str,Any] = {}) : 
+    def StructureEstimator(self, atoms : Atoms, rcut : float = 5.0, nb_bin = 100) -> reference_structure : 
+        """Agnostic reference structure identifier for dislocation analysis. This method is 
+        based on CNA analysis from ```Ovito```.
+        
+        Parameters:
+        -----------
+
+        atoms : Atoms 
+            Atoms system to analyse
+
+        rcut : float 
+            Cutoff radius for CNA analysis
+
+        nb_bin : int 
+            Number of bins used to build the RDF histogram
+
+        Returns:
+        --------
+
+        reference_structure 
+            ```reference_structure``` dictionnary needed for dislocation analysis
+
+        """
+        dictionnary_equivalent = {'bcc': lambda x : 2.0*x/np.sqrt(3.0)*np.eye(3),
+                                  'fcc': lambda x : np.sqrt(2.0)*x*np.eye(3)}
+        inv_dict_struct = {'other':0,
+                           'fcc':1,
+                           'hcp':2,
+                           'bcc':3,
+                           'ico':4}
+
         ovito_config = ase_to_ovito(atoms)
-        ovito_config.particles_.create_property('Structure Type',data=np.asarray(list_type))
+        pipeline = Pipeline(source = StaticSource(data = ovito_config))
+        CNA = CoordinationAnalysisModifier(cutoff = rcut, number_of_bins = nb_bin) 
+        pipeline.modifiers.append(CNA)
+        data = pipeline.compute()
+        rdf = data.tables['coordination-rdf'].xy()
+        particule_type = data.particles['Coordination'][:]
+
+        # guessing the structure from CNA ...
+        types, count_types = np.unique(particule_type, return_counts=True)
+        structure = inv_dict_struct[types[np.argmax(count_types)]]
+
+        if structure not in dictionnary_equivalent.keys() : 
+            raise NotImplementedError(f'{structure} is not implemented ...')
+
+        #compute the maximum of radial distribution function
+        max_idx = np.argmax(rdf[:,1])
+        maximum_r = rdf[max_idx,0]
+
+        return {'structure':structure, 'unit_cell':dictionnary_equivalent[structure](maximum_r)}
+
+    def DXA_analysis(self, atoms : Atoms, lattice_type : str, param_dxa : Dict[str,Any] = {}) -> None : 
+        """Perform classical DXA analysis from ```Ovito``` ...
+        
+        Parameters:
+        -----------
+
+        atoms : Atoms 
+            Atoms system to analyse
+
+        lattice_type : str 
+            Reference cristallographic lattice of the system 
+
+        param_dxa : Dict[str,Any]
+            Optional dictionnary of parameters for DXA (see https://www.ovito.org/docs/current/reference/pipelines/modifiers/dislocation_analysis.html)
+        """
+        ovito_config = ase_to_ovito(atoms)
+        #ovito_config.particles_.create_property('Structure Type',data=np.asarray(list_type))
 
         pipeline = Pipeline(source = StaticSource(data = ovito_config))
         dic_lattice = {'fcc':DislocationAnalysisModifier.Lattice.FCC,
@@ -421,6 +491,23 @@ class DfctAnalysisObject :
         return 
 
     def _predict_logistic(self, species : str, array_desc : np.ndarray) -> np.ndarray : 
+        """Predict the logistic score for a given array of descriptor
+        
+        Parameters:
+        -----------
+
+        species : str 
+            Species associated to the descritpor array 
+
+        array_desc : np.ndarray 
+            Descriptor array (M,D)
+
+        Returns:
+        --------
+
+        np.ndarray 
+            Associated logistic score probabilities array (M,N_c) where N_c is the number of logistic classes
+        """
         return self.logistic_model[species].predict_proba(array_desc)
 
     def one_the_fly_logistic_analysis(self, atoms : Atoms) -> Atoms :
@@ -470,10 +557,32 @@ class DfctAnalysisObject :
         return atoms
 
 ###############################################################
-### ANALYSIS PART 
+### UPDATING POINT DEFECT CLUSTERS PART 
 ###############################################################
-    def update_dfct(self, key_dfct : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0, elliptic : str = 'iso') :
-        """Method to update defect inside dictionnary"""
+    def update_dfct(self, key_dfct : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0, elliptic : str = 'iso') -> None :
+        """Method to update defect inside dictionnary
+        
+        Parameters:
+        -----------
+
+        key_dfct : str 
+            Type of defect to update (this method manage only ```vacancy``` and ```interstitial```)
+
+        atom : Atom
+            Atom object to update in a ```Cluster``` object
+
+        array_property : Dict[str,Any]
+            Dictionnnary which contains additional data about atom in the cluster (atomic volume, mcd distance ...)
+
+        rcut : float 
+            Cut off raduis used as initial size for new ```Cluster```
+
+        elliptic : str 
+            Type of size estimation for ```Cluster```. 
+            ```iso``` : isotropic cluster 
+            ```aniso``` : elliptic cluster
+
+        """
         if self.dfct[key_dfct] == {} : 
             self.dfct[key_dfct]['0'] = Cluster(atom, rcut, array_property=array_property)
         
@@ -487,13 +596,46 @@ class DfctAnalysisObject :
                 self.dfct[key_dfct][next_index] = Cluster(atom, rcut, array_property=array_property) 
 
     def _aggregate_cluster(c1 : Cluster, c2 : Cluster) -> Cluster : 
+        """Local method to aggregate two ```Cluster``` objects
+        
+        Parameters:
+        -----------
+
+        c1 : Cluster
+            First ```Cluster``` to aggregate
+
+        c2 : Cluster 
+            Second ```Cluster``` to aggregate
+
+        Returns:
+        --------
+
+        Cluster
+            Aggregated ```Cluster``` from c1 and c2
+        
+        """
         atom_c2 = c2.atoms_dfct
         c1.atoms_dfct += atom_c2
         c1.center = c1.atoms_dfct.get_center_of_mass()
         c1.update_extension()
+        
         return c1
 
     def AggregateClusters(self, dic_cluster : Dict[str,Cluster] ) -> Dict[str,Cluster] : 
+        """General aggregation method for point defect cluster
+        
+        Parameters:
+        -----------
+
+        dic_cluster : Dict[str,Cluster]
+            Dictionnary of ```Cluster``` to aggregate
+
+        Returns:
+        --------
+
+        Dict[str,Cluster]
+            Aggreagated dictionnary of ```Cluster```
+        """
         updated_dict_cluster : Dict[str,Cluster] = {'0':dic_cluster['0']}
         for key, cluster in dic_cluster.items() : 
             if key == '0' : 
@@ -511,12 +653,16 @@ class DfctAnalysisObject :
         return updated_dict_cluster 
 
     def AggregateAllClusters(self) -> None :
+        """Automatic method to aggregate ```Cluster``` execpt dislocations !"""
         for dfct, dic_cluster_dfct in self.dfct.items():
             if len(dic_cluster_dfct) > 0 and dfct != 'dislocation' :
                 dic_cluster_dfct = self.AggregateClusters(dic_cluster_dfct)
         
         return 
-    
+
+###############################################################
+### GLOBAL ANALYSIS PART 
+###############################################################
     def VacancyAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
         """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
         
@@ -535,7 +681,7 @@ class DfctAnalysisObject :
         
         max_mcd = np.amax(mcd_distance)
         mean_atomic_volume = np.mean(atomic_volume)
-
+        self.mean_atomic_volume = mean_atomic_volume
 
         # build the mask
         mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume > mean_atomic_volume)
@@ -546,14 +692,6 @@ class DfctAnalysisObject :
             self.update_dfct('vacancy', atom, array_property={'atomic-volume':[atomic_volume[id_atom]]}, rcut=4.0, elliptic = elliptic)
 
         return
-
-        #for key in self.dfct['vacancy'].keys() :
-        #    center = self.dfct['vacancy'][key].center.flatten()
-        #    print('Vacancy cluster {:s} : nb vacancy {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f}'.format(key,
-        #                                                                                                        self.dfct['vacancy'][key].estimate_dfct_number(mean_atomic_volume),
-        #                                                                                                        center[0],
-        #                                                                                                        center[1],
-        #                                                                                                        center[2]))
 
     def InterstialAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
         """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
@@ -573,6 +711,7 @@ class DfctAnalysisObject :
         
         max_mcd = np.amax(mcd_distance)
         mean_atomic_volume = np.mean(atomic_volume)
+        self.mean_atomic_volume = mean_atomic_volume
 
         # build the mask
         mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume < mean_atomic_volume)
@@ -584,10 +723,160 @@ class DfctAnalysisObject :
 
         return     
         
-        #for key in self.dfct['vacancy'].keys() :
-        #    center = self.dfct['vacancy'][key].center.flatten()
-        #    print('Interstial cluster {:s} : nb vacancy {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f}'.format(key,
-        #                                                                                                    self.dfct['vacancy'][key].estimate_dfct_number(mean_atomic_volume),
-        #                                                                                                    center[0],
-        #                                                                                                    center[1],
-        #                                                                                                    center[2]))
+    def DislocationAnalysis(self, atoms : Atoms, mcd_threshold : float,
+                            rcut_extended : float = 4.0,
+                            rcut_full : float = 5.0,
+                            rcut_neigh : float = 5.0,
+                            reference_structure : reference_structure = None,
+                            params_dislocation : Dict[str,float | np.ndarray] = {}) -> None : 
+        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
+        
+        Parameters:
+        -----------
+
+        atoms : Atoms 
+            Atoms object to analyse 
+
+        mcd_treshold : float
+            Ratio mcd/max(mcd) to consider the presence of atomic defect
+
+        """
+        
+        if rcut_extended > rcut_full : 
+            raise ValueError(f'First buffer region is larger than second buffer region ! ({rcut_extended} > {rcut_full})')
+
+        atomic_volume = atoms.get_array('atomic-volume').flatten()
+        mcd_distance = atoms.get_array('mcd-distance').flatten()
+        
+        max_mcd = np.amax(mcd_distance)
+        mean_atomic_volume = np.mean(atomic_volume)
+        self.mean_atomic_volume = mean_atomic_volume
+
+        # build the mask
+        mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume < mean_atomic_volume)
+        idx2do = np.where(mask)[0]
+        dislo_system : Atoms = atoms[idx2do]
+
+        idx_extended = [ id for id, at in enumerate(atoms) if np.amin( [ np.linalg.norm(at.position - at_dis.position) for at_dis in dislo_system] ) < rcut_extended ]
+        idx_full = [ id for id, at in enumerate(atoms) if np.amin( [ np.linalg.norm(at.position - at_dis.position) for at_dis in dislo_system] ) < rcut_full ]
+        extended_system = atoms[idx_extended]
+        full_system = atoms[idx_full]
+
+        if reference_structure is None :
+            reference_structure = self.StructureEstimator(atoms, rcut = 5.0, nb_bin = 200)
+
+        dislocation_obj = DislocationObject(dislo_system,
+                                            extended_system,
+                                            full_system,
+                                            rcut_neigh,
+                                            reference_structure = reference_structure)
+
+        if len(params_dislocation) == 0 : 
+            params_dislocation = {'rcut_line' : 3.5, 
+                                  'rcut_burger' : 4.5, 
+                                  'rcut_cluster' : 5.0,
+                                  'scale_cluster' : 1.2,
+                                  'descriptor' : None, 
+                                  'smoothing_line' : {'nb_averaging_window':3}}
+        
+        if params_dislocation['descriptor'] is not None : 
+            params_dislocation['descriptor'] = atoms.get_array('milady-descriptor')[idx2do]
+
+        dislocation_obj.BuildDislocations(params_dislocation['rcut_line'],
+                                         params_dislocation['rcut_burger'],
+                                         params_dislocation['rcut_cluster'],
+                                         params_dislocation['scale_cluster'],
+                                         params_dislocation['descriptor'],
+                                         params_dislocation['smoothing_line'])
+
+        return     
+        
+###########################################
+#### WRITING PART 
+###########################################
+
+    def GetAllPointDefectData(self, path2write : os.PathLike[str] = './point_dfct.data') -> None : 
+        """Extracting data from point defect analysis...
+        
+        Parameters:
+        -----------
+
+        path2write : os.PathLike[str]
+            Path to write data file
+        """
+        with open(path2write,'w') as f_data : 
+            f_data.write('Here is data analysis for point defects ... \n')
+            for dfct in ['vacancy', 'interstial'] : 
+                f_data.write(f' {dfct} analysis : I found {len(self.dfct[dfct])} clusters \n')
+                print(f' {dfct} analysis : I found {len(self.dfct[dfct])} clusters \n')
+                for key_dfct in self.dfct[dfct].keys() :
+                    center = self.dfct[dfct][key_dfct].center.flatten()
+                    f_data.write('{:s} cluster {:s} : nb dfct {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f} \n'.format(dfct,
+                                                                                                            key_dfct,
+                                                                                                            self.dfct[dfct][key_dfct].estimate_dfct_number(self.mean_atomic_volume),
+                                                                                                            center[0],
+                                                                                                            center[1],
+                                                                                                            center[2]))
+                    print('{:s} cluster {:s} : nb dfct {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f}'.format(dfct,
+                                                                                                            key_dfct,
+                                                                                                            self.dfct[dfct][key_dfct].estimate_dfct_number(self.mean_atomic_volume),
+                                                                                                            center[0],
+                                                                                                            center[1],
+                                                                                                            center[2]))
+                f_data.write('\n')
+                print()
+        return 
+
+    def GetDislocationsData(self, path2write : os.PathLike[str] = './dislocation.data', only_average_data : bool = False) -> None : 
+        """Extracting data from dislocation analysis...
+        
+        Parameters:
+        -----------
+
+        path2write : os.PathLike[str]
+            Path to write data file
+
+        only_average_data : bool 
+            If ```only_average_data``` is set to False, all data about dislocation analysis are writen in data file
+        """
+
+        def array2str(array : np.ndarray) -> str : 
+            return "".join(array)
+
+        with open(path2write,'w') as f_data : 
+            f_data.write('Here is data analysis for dislocation ... \n')
+            f_data.write(f' dislocation analysis : I found {len(self.dfct['dislocation'])} dislocations \n')
+            print(f' dislocation analysis : I found {len(self.dfct['dislocation'])} dislocations ')
+            for key_dislo in self.dfct['dislocation'].keys() :
+                center = self.dfct['dislocation'][key_dislo].center.flatten()
+                lenght, segments = self.dfct['dislocation'][key_dislo].get_lenght_line()
+                av_burger, burgers = self.dfct['dislocation'][key_dislo].get_burger_vector_line()
+                av_caracter, caracters = self.dfct['dislocation'][key_dislo].get_caracter_line()
+
+                print('Dislocation cluster {:s} : nb dfct {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f}, lenght line : {:3.2f}, average burger : {:2.2f}, average caracter : {:1.2f}'.format(key_dislo,
+                                                                                        self.dfct['dislocation'][key_dislo].estimate_dfct_number(self.mean_atomic_volume),
+                                                                                        center[0],
+                                                                                        center[1],
+                                                                                        center[2]),
+                                                                                        lenght,
+                                                                                        av_burger,
+                                                                                        av_caracter) 
+                f_data.write('Dislocation cluster {:s} : nb dfct {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f}, lenght line : {:3.2f}, average burger : {:2.2f}, average caracter : {:1.2f} \n'.format(key_dislo,
+                                                                                    self.dfct['dislocation'][key_dislo].estimate_dfct_number(self.mean_atomic_volume),
+                                                                                    center[0],
+                                                                                    center[1],
+                                                                                    center[2]),
+                                                                                    lenght,
+                                                                                    av_burger,
+                                                                                    av_caracter)
+                    
+                if not only_average_data : 
+                    #nightmare begins ...
+                    str_data = ['segments | burgers | caracters \n']
+                    str_data += [ f'{array2str(segments[i])} | {array2str(burgers[i])} | {caracters[i]} \n' for i in range(len(segments)) ]
+                    f_data.write(''.join(str_data))
+            
+            f_data.write('\n')
+            print()
+        
+        return 
