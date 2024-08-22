@@ -1,0 +1,41 @@
+<MAB>
+	<Parameters>
+		<CoresPerWorker>1</CoresPerWorker>
+		<Temperature>300.0</Temperature>
+		<LambdaGrid>
+			<Min>-0.1</Min>
+			<Max>1.1</Max>
+			<Number>110</Number>
+		</LambdaGrid>
+	
+		<Dynamic>OverdampedLangevin</Dynamic>
+		<DeltaT>0.1</DeltaT>	
+		<Friction>0.05</Friction>
+		<ReferenceModel> 
+			<model>Einstein</model>
+			<omega>6.0</omega>
+		</ReferenceModel>
+		<Block>False</Block>
+		<ConstrainedPotential>
+			<model>Standard</model>
+			<C>1.0</C>
+			<delta>1.0</delta>
+		</ConstrainedPotential>
+		<StochasticStep>10000</StochasticStep>
+		
+		
+		<WritingStep>2000</WritingStep>
+		<WorkingDirectory>./mab_work</WorkingDirectory>
+	</Parameters>
+
+	<Pathways> 
+		<Configuration>set_path</Configuration>
+		<Potential>set_path</Potential>
+		<Species>set species</Species>
+	</Pathways>
+
+	<Script>
+	Set script
+	</Script>
+
+</MAB>
