@@ -20,8 +20,21 @@ class Fe_data :
                   'A15':3.5225,
                   'C15':2.8553} 
 
-    def _iron_based_a0(self, structure : str) -> None :
+    def _iron_based_a0(self, structure : str) -> float :
+        """Give Fe a0 depending on cristallographic structure (not accurate)
         
+        Parameters:
+        -----------
+
+        structure : str 
+            Cristallograhpic structure 
+
+        Returns:
+        --------
+
+        float 
+            Associated a0
+        """
         try : 
             return self.dic_a0[structure]
         except KeyError : 
@@ -53,8 +66,22 @@ class Fe_data :
         return a0*(1.0 + np.poly1d(poly_delta_a0)(temperature) - np.poly1d(poly_delta_a0)(0.0))
 
 class HarmonicThermicGenerator : 
-    """Build fake thermic configuration for a given lattice"""
+    """Build fake thermic configuration for a given lattice
+    Thermic noise is based on harmonic vibrations of the system 
+    """
     def __init__(self, temperature = List[float], configs_per_temp : int = 100) -> None : 
+        """Init method for ```HarmonicThermicGenerator```
+        
+        Parameters: 
+        -----------
+
+        temperature : List[float]
+            List of temperatures to sample 
+
+        configs_per_temp : int 
+            Number of sample per temperature
+        """
+        
         self.temperature = temperature
         self.configs_per_temp = configs_per_temp
         self.thermic_configs : Dict[str,Dict[str,List[Atoms]]]= {}
@@ -69,13 +96,39 @@ class HarmonicThermicGenerator :
         self.harmonic_vibration = None 
 
     def init_harmonic_vibration_object(self, atoms : Atoms,
-                                path_potential_lammps : str, 
+                                path_potential_lammps : os.PathLike[str], 
                                 kind_potential : str = 'eam/alloys',
-                                working_path : str = '/harmonic_vib', 
-                                name_lammps_file = 'in.lmp',
+                                working_path : os.PathLike[str] = '/harmonic_vib', 
+                                name_lammps_file : os.PathLike[str] = 'in.lmp',
                                 delta_xi : float = 1e-3,
                                 relative_norm : float = 1e-2) -> None : 
+        """Initialisation of ```HarmonicVibration``` object which performs dynamical matrix sampling and diagonalisation (couple with lammps)
         
+        Parameters:
+        -----------
+
+        atoms : Atoms 
+            Atoms system to compute vibrationnal properties
+
+        path_potential_lammps : os.PathLike[str]
+            Path to the lammps potential
+
+        kind_potential : str 
+            Type of semi empirical potential
+
+        working_path : os.PathLike[str]
+            Path to the working directory for lammps calculations    
+        
+        name_lammps_file : os.PathLike[str]
+            Name of the geometry file writen for calculation
+        
+        delta_xi : float 
+            Displacement amplitude (in AA)
+
+        relative_norm : float
+            Tolerance on symmetric relative norm for dynamical matrix (see ```HarmonicVibration``` doc...)
+        """
+
         self.harmonic_vibration = HarmonicVibration(atoms, 
                                                     path_potential_lammps,
                                                     displacement_amplitude=delta_xi,
@@ -90,11 +143,47 @@ class HarmonicThermicGenerator :
 
         return 
 
-    def compute_harmonic_spectra(self, name_file : str = 'in.lmp') -> None : 
+    def compute_harmonic_spectra(self, name_file : os.PathLike[str] = 'in.lmp') -> None : 
+        """Compute the harmonic spectra for a given system 
+        
+        Parameters:
+        -----------
+
+        name_file : os.PathLike[str]
+            Path of lammps file associated to the interest system
+
+        """
         self.harmonic_vibration.InitSimulation(name_file=name_file)
         self.harmonic_vibration.VibrationDiagCalculation()
 
-    def generate_thermic_noise(self, temperature : float, atoms : Atoms, spherical : bool = False, scaling_factor : float = 1.0) -> Atoms : 
+    def generate_thermic_noise(self, temperature : float, 
+                               atoms : Atoms, 
+                               spherical : bool = False, 
+                               scaling_factor : float = 1.0) -> Atoms : 
+        """Generate one realisation of harmonic thermic noise for a given system
+        
+        Parameters:
+        -----------
+
+        temperature : float 
+            Temperature of the harmonic thermic noise 
+
+        atoms : Atoms 
+            ```Atoms``` system to generate thermic noise 
+
+        spherical : bool 
+            If true an einstein thermic noise is generate otherwise full harmonic thermic noise is generated
+
+        scaling_factor : float
+            Scaling factor for thermic noise
+
+        Returns:
+        --------
+
+        Atoms 
+            ```Atoms``` system with harmonic thermic noise
+
+        """
         if spherical : 
             return self._generate_spherical_thermic_noise(temperature, self.harmonic_vibration.GetEinsteinOmega(), atoms, scaling_factor=scaling_factor) 
         else : 
@@ -172,6 +261,18 @@ class HarmonicThermicGenerator :
         return atoms    
 
     def _check_interatomic_distances(self, atoms : Atoms, temperature : float) -> None :
+        """Compute / check the minimum distance in a periodic system
+        
+        Parameters:
+        -----------
+
+        atoms : Atoms 
+            System to check 
+
+        temperature : float 
+            Temperature of the system
+
+        """
         periodic_positions = self.dirty_periodic_system(atoms)
         list_rij = []
         for pos in atoms.positions :
@@ -183,6 +284,21 @@ class HarmonicThermicGenerator :
         print('Minimum distance in the system is {:2.4f} AA at {:3.1f} K'.format(np.amin(list_rij),temperature))
         
     def dirty_periodic_system(self, atoms : Atoms) -> np.ndarray : 
+        """Build dirty periodic system from ```Atoms``` configuration
+        
+        Parameters:
+        -----------
+
+        atoms : Atoms 
+            Atoms system to build periodic image
+
+        Returns:
+        --------
+
+        np.ndarray
+            Positions associated to the replicated system
+        
+        """
         #build periodic system...
         list_positions = [pos for pos in atoms.positions]
         cell = atoms.cell[:]
@@ -271,7 +387,25 @@ class HarmonicThermicGenerator :
         print()    
         return 
     
-    def GenerateDBDictionnary(self) -> Tuple[dict] : 
+    def GenerateDBDictionnary(self) -> Tuple[dict, dict] : 
+        """Generate the ```DBDictionnary``` object associated to a given ```AtomsAssembly``` object 
+        
+        Parameters:
+        -----------
+
+        atoms_assembly : AtomsAssembly 
+            ```AtomsAssembly``` object to convert 
+
+        Returns:
+        --------
+
+        dict 
+            Equivalence dictionnary {name_poscar_milady:name_structure}
+
+        dict 
+            Data dictionnary (see ```DBDictionnaryBuilder``` doc...)
+
+        """
         db_dictionnary = DBDictionnaryBuilder()
         dic_equiv = {}
         for id_struc, struc in enumerate(self.thermic_configs.keys()) : 
@@ -284,9 +418,22 @@ class HarmonicThermicGenerator :
         return dic_equiv, db_dictionnary._generate_dictionnary()
 
     def writer(self, db_dic : dict , path_writing : str) -> None : 
+        """Little ```milady``` poscar writer ...
+        
+        Parameters:
+        -----------
+
+        db_dic : dict
+            Data dictionnary (see ```DBDictionnaryBuilder``` doc...)
+
+        path_writing : os.PathLike[str]
+            Path to write ```milady``` poscars
+        """
         for name_poscar in db_dic.keys() : 
             write_milady_poscar('{:s}/{:s}.POSCAR'.format(path_writing,name_poscar),
                                 db_dic[name_poscar]['atoms'],
                                 energy=None,
                                 forces=None,
                                 stress=None)
+        
+        return
