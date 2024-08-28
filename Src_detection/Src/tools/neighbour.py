@@ -17,8 +17,8 @@ def get_neighborhood(
     ###########################################################################################
     """Build the neigbour list for a given positions vector (by including pbc)
     
-    Parameters:
-    -----------
+    Parameters
+    ----------
 
     positions : np.ndarray 
         Positions vector to build the neighbour list
@@ -99,8 +99,8 @@ def get_N_neighbour(atoms : Atoms,
     Two neighborhood are computed : (i) for the system and (ii) for the extended system. These calculation are mandatory
     to evaluate Nye tensor of the system.
 
-    Parameters:
-    -----------
+    Parameters
+    ----------
 
     atoms : Atoms 
         System to compute the neighborhood

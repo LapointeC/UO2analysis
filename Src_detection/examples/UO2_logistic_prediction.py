@@ -1,16 +1,14 @@
 import os, sys 
 import pickle
-import shutil
 
 sys.path.append(os.getcwd())
 
 from ase import Atoms
 
 sys.path.insert(0,'../')
-from ..Src import DBManager, \
+from Src import DBManager, \
                   DfctAnalysisObject, \
-                  my_cfg_reader, \
-                  FrameOvito, LogisticModifier
+                  FrameOvito, LogisticModifier, LogisticRegressor
 
 from ovito.pipeline import Pipeline, PythonSource
 
@@ -36,22 +34,17 @@ previous_dbmodel : DBManager = pickle.load(open(pickle_data_file,'rb'))
 print('... DBmanager data is stored ...')
 print()
 print('... Loading logistic classifier models ...')
-logistic_model : DfctAnalysisObject = pickle.load(open(pickle_logistic,'rb'))
-print(logistic_model.meta_data_model)
-print([key for key in logistic_model.logistic_model.keys()])
-print([logistic_model.logistic_model[key].coef_ for key in logistic_model.logistic_model.keys()])
+logistic_model = LogisticRegressor(pickle_logistic)
+dfct_object = DfctAnalysisObject( previous_dbmodel,
+                                  extended_properties=logistic_model._get_metadata())
+dfct_object.logistic_model = logistic_model
+print([key for key in logistic_model.models.keys()])
+print([val['logistic_regressor'].coef_ for _, val in logistic_model.models.items()])
 print('... Logistic models are stored ...')
-
-if not os.path.exists('{:s}/ovito_min'.format(os.getcwd())) :
-    os.mkdir('{:s}/ovito_min'.format(os.getcwd()))
-else : 
-    shutil.rmtree('{:s}/ovito_min'.format(os.getcwd()))
-    os.mkdir('{:s}/ovito_min'.format(os.getcwd()))
-
 
 for id,key in enumerate(previous_dbmodel.model_init_dic.keys()) :
     print('... Analysis for : {:s} ...'.format(key))
-    atom_config = logistic_model.one_the_fly_logistic_analysis(previous_dbmodel.model_init_dic[key]['atoms'])
+    atom_config = dfct_object.one_the_fly_logistic_analysis(previous_dbmodel.model_init_dic[key]['atoms'])
 
     if id == 0 :
         atoms_config : List[Atoms] = [atom_config]

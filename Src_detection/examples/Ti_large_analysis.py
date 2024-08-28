@@ -8,7 +8,7 @@ from ase import Atoms, Atom
 from ase.io import read
 
 sys.path.insert(0,'../')
-from ..Src import DBDictionnaryBuilder, DBManager, \
+from Src import DBDictionnaryBuilder, DBManager, \
                   Milady, Optimiser, Regressor, Descriptor, \
                   DfctAnalysisObject, \
                   FrameOvito, MCDModifier

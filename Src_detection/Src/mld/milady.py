@@ -171,8 +171,8 @@ class Regressor :
     def ComputeDescriptors(cls, write_design_matrix : bool = False) :
         """Compute only descriptors for a given subset of configurations
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             write_design_matrix: bool 
                 Boolean to write the design matrix of the system
@@ -188,8 +188,8 @@ class Regressor :
                write_design_matrix : bool = False) : 
         """Fit a linear model in descriptors for a given subset of configurations
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
             train_only: bool
                 Boolean to perform only training and no test
@@ -212,8 +212,8 @@ class Regressor :
                write_design_matrix : bool = False) : 
         """Fit a quadratic model in descriptors for a given subset of configurations
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
             mld_type_quadratic: int 
                 Specify the type quadratic potential:
@@ -243,8 +243,8 @@ class Regressor :
                          write_design_matrix : bool = False) :
         """Fit a polynomial chaos model in descriptors for a given subset of configurations
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
             polyc_n_poly: int 
                 Degree of polynomial chaos extension
@@ -275,8 +275,8 @@ class Regressor :
                write_design_matrix : bool = False) : 
         """Fit a N-linear model in descriptors for a given subset of configurations
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
             order_nlinear: int
                 Maximum order of N-linear model 
@@ -313,8 +313,8 @@ class Regressor :
         """Fit a kernel model in descriptors for a given subset of configurations more informations 
         https://ai-atoms.github.io/milady-docs/contents/ml/kernels.html
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
             kernel_type: str
                 Type of kernel used for the regression. Following ones are implemented 
@@ -416,8 +416,8 @@ class Descriptor :
         """Compute G2 radial descritpors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -450,8 +450,8 @@ class Descriptor :
         """Compute G3 radial descritpors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -484,8 +484,8 @@ class Descriptor :
         """Compute Behler descritpors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -509,8 +509,8 @@ class Descriptor :
         """Compute AFS descritpors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -549,8 +549,8 @@ class Descriptor :
         """Compute SOAP descritpors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -601,8 +601,8 @@ class Descriptor :
         """Compute power spectrum SO3 descriptors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -636,8 +636,8 @@ class Descriptor :
         """Compute power spectrum SO3 - 3 bodies descriptors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -671,8 +671,8 @@ class Descriptor :
         """Compute bi-spectrum SO3 descriptors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -706,8 +706,8 @@ class Descriptor :
         """Compute bi-spectrum SO4 descriptors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -746,8 +746,8 @@ class Descriptor :
         """Compute G2 + AFS descritpors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -799,8 +799,8 @@ class Descriptor :
         """Compute G2 + BSO4 descritpors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -845,8 +845,8 @@ class Descriptor :
         """Compute MPT descriptors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -878,8 +878,8 @@ class Descriptor :
         """Compute PiP descriptors for a given subset of configurations.
         More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
             r_cut: float 
                 Cut-off raduis for descriptor calculation
@@ -921,8 +921,8 @@ class Descriptor :
 def DescriptorsHybridation(descriptor1 : Descriptor, descriptor2 : Descriptor) -> Descriptor :
     """Build the hybrid descriptor from descriptor1 and descriptor2 
     
-    Parameters: 
-    -----------
+    Parameters 
+    ----------
 
         descriptor1: Descriptor
             First descriptor object
@@ -974,8 +974,8 @@ class DBManager :
         - prepare_db_ml, which writes all files necessary to use Milady and Milady poscars associated
         to the database  
 
-    Parameters: 
-    -----------
+    Parameters 
+    ----------
 
         atoms: Union[Atoms,List[Atoms]]
             Database to compute based on Atoms objects. Database can be composed of one atom object or 
@@ -1014,7 +1014,7 @@ class DBManager :
         """Write db_model.in file for Milady code. More informations are available at : 
         https://ai-atoms.github.io/milady-docs/contents/ml/database.html
         
-        Parameters:
+        Parameters
         ----------
 
             directory: str
@@ -1059,8 +1059,8 @@ class DBManager :
         This method also call method to write associated db_model.in file. 
 
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         directory: str
             Directory of calculations
@@ -1114,7 +1114,7 @@ class Milady(Calculator):  # type: ignore
     """ASE interface for the Vienna Ab initio Simulation Package (VASP),
     with the Calculator interface.
 
-        Parameters:
+        Parameters
 
             atoms:  object
                 Attach an atoms objewrite_descrct to the calculator.

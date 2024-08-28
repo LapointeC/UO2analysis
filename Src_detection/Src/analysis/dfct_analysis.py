@@ -2,18 +2,13 @@ import numpy as np
 import os
 import matplotlib.pyplot as plt
 import more_itertools
-from sklearn.linear_model import LogisticRegression
-from sklearn.covariance import MinCovDet
-from sklearn.decomposition import PCA
-from sklearn.mixture import BayesianGaussianMixture
-from sklearn.neighbors import KernelDensity
 
 from ase import Atoms, Atom
-
 from typing import Dict, List, Any, Tuple
-from .library_mcd import MCDAnalysisObject
+from ..metrics import MCDModel, GMMModel, PCAModel, LogisticRegressor
 from ..clusters import Cluster, ClusterDislo, DislocationObject, reference_structure
 from ..mld import DBManager
+from ..tools import timeit
 
 from ovito.io.ase import ase_to_ovito
 from ovito.modifiers import VoronoiAnalysisModifier, DislocationAnalysisModifier, CoordinationAnalysisModifier
@@ -24,19 +19,19 @@ from ovito.pipeline import StaticSource, Pipeline
 ## Dfct analysis object
 #######################################################
 class DfctAnalysisObject : 
-
+    """TODO write doc"""
     def __init__(self, dbmodel : DBManager, extended_properties : List[str] = None, **kwargs) -> None : 
         self.dic_class : Dict[str,Dict[str,List[Atoms]]] = {}
-        self.mcd_model : Dict[str,MinCovDet] = {}
-        self.gmm : Dict[str,BayesianGaussianMixture] = {}
-        self.logistic_model : Dict[str,LogisticRegression] = {} 
-        self.distribution : Dict[str,KernelDensity] = {}
-        self.meta_data_model = []
-        self.dfct : Dict[str, Dict[str, Cluster | ClusterDislo]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
+        self.mcd_model = MCDModel()
+        self.gmm_model = GMMModel()
+        self.pca_model = PCAModel()
+        self.logistic_model = LogisticRegressor() 
 
+        self.dfct : Dict[str, Dict[str, Cluster | ClusterDislo]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
         self.mean_atomic_volume = None 
 
         def fill_dictionnary(key : str, at : Atom, id_at : int, descriptors : np.ndarray, extended_properties : List[str], dic : Dict[str,List[Atoms]]) -> None : 
+            """TODO write doc"""
             atoms = Atoms([at])          
             atoms.set_array('milady-descriptors',descriptors[id_at,:].reshape(1,descriptors.shape[1]), dtype=float)
             if extended_properties is not None : 
@@ -89,8 +84,8 @@ class DfctAnalysisObject :
     def compute_Voronoi(self, atoms : Atoms) -> Atoms : 
         """Compute atomic volume and coordination based on Ovito Voronoi analysis
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms
             Atoms object corresponding to a given configuration
@@ -122,8 +117,8 @@ class DfctAnalysisObject :
         """Agnostic reference structure identifier for dislocation analysis. This method is 
         based on CNA analysis from ```Ovito```.
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms system to analyse
@@ -173,8 +168,8 @@ class DfctAnalysisObject :
     def VoronoiDistribution(self, atoms : Atoms, species : str, nb_bin : int = 20) -> Tuple[float, float] :
         """Plot atomic volume distribution for a given system 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms system to perform the Voronoi distribution analysis
@@ -217,8 +212,8 @@ class DfctAnalysisObject :
     def MCDDistribution(self, atoms : Atoms, species : str, nb_bin : int = 20, threshold : float = 0.05) -> float : 
         """Perform MCD analysis for a given species
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms system to analyse
@@ -258,7 +253,7 @@ class DfctAnalysisObject :
         cm = plt.cm.get_cmap('gnuplot')
         print('')
         print('... Starting PCA analysis for {:s} atoms ...'.format(species))
-        desc_transform = self._get_pca_model(atoms, n_component=2)
+        desc_transform = self.pca_model._get_pca_model(atoms, species, n_component=2)
         scat = axis[1].scatter(desc_transform[:,0],desc_transform[:,1],
                                c=list_mcd,
                                cmap=cm,
@@ -279,8 +274,8 @@ class DfctAnalysisObject :
     def DXA_analysis(self, atoms : Atoms, lattice_type : str, param_dxa : Dict[str,Any] = {}) -> None : 
         """Perform classical DXA analysis from ```Ovito``` ...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms system to analyse
@@ -320,41 +315,37 @@ class DfctAnalysisObject :
             print("Dislocation %i: length=%f, Burgers vector=%s" % (line.id, line.length, line.true_burgers_vector))
             print(line.points)
 
-    def setting_mcd_model(self, MCD_object : MCDAnalysisObject) -> None : 
+    def setting_mcd_model(self, path_pkl : os.PathLike[str]) -> None : 
         """Loading MCD models from a previous bulk analysis
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         MCD_object : MCD_analysis_object 
             Filled MCD_analysis_object from a bulk analysis
 
         """
-        for species, models in MCD_object.mcd_model.items() : 
-            self.mcd_model[species] = models 
-            self.distribution[species] = MCD_object.distribution[species]
+        self.mcd_model = MCDModel(path_pkl)
         return
 
-    def setting_gmm_model(self, MCD_object : MCDAnalysisObject) -> None : 
-        """Loading MCD models from a previous bulk analysis
+    def setting_gmm_model(self, path_pkl : os.PathLike[str]) -> None : 
+        """Loading GMM models from a previous bulk analysis
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         MCD_object : MCD_analysis_object 
             Filled MCD_analysis_object from a bulk analysis
 
         """
-        for species, gmm in MCD_object.gmm.items() : 
-            self.gmm[species] = gmm
-            self.distribution[species] = gmm
+        self.gmm_model = GMMModel(path_pkl)
         return
 
     def _get_all_atoms_species(self, species : str) -> List[Atoms] : 
         """Create the full list of Atoms for a given species
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         species : str
             Species to select 
@@ -374,127 +365,19 @@ class DfctAnalysisObject :
 
         return list_atoms_species
 
-    def _get_pca_model(self, atoms : Atoms, n_component : int = 2) -> np.ndarray : 
-        """Build PCA model from data
-        
-        Parameters:
-        -----------
-
-        atoms : Atoms 
-            Atoms system to analyse
-
-        n_component : int 
-            Number of PCA dimension used for projection
-        
-        Returns:
-        --------
-
-        np.ndarray 
-            Projected atoms into PCA representation (M,n_component)
-        """
-        pca_model = PCA(n_components=n_component)
-        descriptors_array = atoms.get_array('milady-descriptors')
-        return pca_model.fit_transform(descriptors_array)
-
-    def _get_mcd_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
-        """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
-        
-        Parameters:
-        -----------
-
-        list_atoms : List[Atoms]
-            List of Atoms objects where mcd distance will be computed
-
-        species : str
-            Species associated to list_atoms
-
-            
-        Returns:
-        --------
-
-        List[Atoms]
-            Updated List of Atoms with the new array "mcd-distance"
-        """
-        for atoms in list_atoms : 
-            mcd_distance = self.mcd_model[species].mahalanobis(atoms.get_array('milady-descriptors'))  
-            atoms.set_array('mcd-distance',np.sqrt(mcd_distance), dtype=float)
-
-        return list_atoms
-
-    def _get_gmm_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
-        """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
-        
-        Parameters:
-        -----------
-
-        list_atoms : List[Atoms]
-            List of Atoms objects where mcd distance will be computed
-
-        species : str
-            Species associated to list_atoms
-
-            
-        Returns:
-        --------
-
-        List[Atoms]
-            Updated List of Atoms with the new array "mcd-distance"
-        """
-        
-        def mahalanobis_gmm(model : BayesianGaussianMixture, X : np.ndarray) -> np.ndarray : 
-            mean_gmm = model.means_
-            invcov_gmm = model.precisions_
-            array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
-            for i in range(array_distance.shape[1]):
-                array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
-            return array_distance
-
-        for atoms in list_atoms : 
-            gmm_distance = mahalanobis_gmm(self.gmm[species],atoms.get_array('milady-descriptors')) 
-            atoms.set_array('gmm-distance',gmm_distance, dtype=float)
-
-        return list_atoms
-
-    def mahalanobis_gmm(self, model : BayesianGaussianMixture, X : np.ndarray) -> np.ndarray : 
-        """Predict the distance array associated to gaussian mixture. Element i of the array 
-        corresponding to d_i(X) the distance from X to the center of Gaussian i
-        
-        Parameters
-        ----------
-
-        model : BayesianGaussianMixture
-            Gaussian mixture model 
-
-        X : np.ndarray 
-            Data to compute distances 
-
-        Returns 
-        -------
-
-        np.ndarray 
-            Distances array
-
-        """
-        mean_gmm = model.means_
-        invcov_gmm = model.precisions_
-        array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
-        for i in range(array_distance.shape[1]):
-            array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
-        return array_distance
-
     def one_the_fly_mcd_analysis(self, atoms : Atoms) -> Atoms :
         """Build one the fly mcd distances
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms object containing a given configuration
         """
 
         descriptor = atoms.get_array('milady-descriptors')
-        list_mcd = [ np.sqrt(self.mcd_model[at.symbol].mahalanobis(descriptor[id_at,:].reshape(1,descriptor.shape[1]))) for id_at, at in enumerate(atoms)  ]
-        list_proba = [ self.distribution[at.symbol].score(list_mcd[id_at]) for id_at, at in enumerate(atoms)]
+        list_mcd = [ np.sqrt(self.mcd_model[at.symbol]['mcd'].mahalanobis(descriptor[id_at,:].reshape(1,descriptor.shape[1]))) for id_at, at in enumerate(atoms)  ]
+        list_proba = [ self.mcd_model[at.symbol]['distribution'].score(list_mcd[id_at]) for id_at, at in enumerate(atoms)]
 
         atoms.set_array('mcd-distance',
                         np.array(list_mcd).reshape(len(list_mcd),),
@@ -508,8 +391,8 @@ class DfctAnalysisObject :
     def one_the_fly_gmm_analysis(self, atoms : Atoms) -> Atoms :
         """Build one the fly gmm distances
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms object containing a given configuration
@@ -521,8 +404,10 @@ class DfctAnalysisObject :
         dim_gmm = None 
         for id_at, at in enumerate(atoms) : 
             descriptor_at = descriptor[id_at,:].reshape(1,descriptor.shape[1])
-            gmmd = self.mahalanobis_gmm( self.gmm[at.symbol], descriptor_at )
-            score = self.gmm[at.symbol].score(descriptor_at)
+            #gmmd = self.mahalanobis_gmm( self.gmm[at.symbol], descriptor_at )
+            #score = self.gmm[at.symbol].score(descriptor_at)
+            gmmd = self.gmm_model.mahalanobis_gmm(at.symbol, descriptor_at)
+            score = self.gmm_model._predict_probability(gmmd, at.symbol)
             if dim_gmm is None : 
                 dim_gmm = gmmd.shape[1]
 
@@ -537,11 +422,12 @@ class DfctAnalysisObject :
                         dtype=float)
         return atoms
     
+    #@timeit
     def _labeling_outlier_atoms(self, atoms : Atoms, dic_nb_dfct : Dict[str,int]) -> Atoms : 
         """Make labelisation of atoms in system depending their energies
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms configuration to label 
@@ -564,7 +450,7 @@ class DfctAnalysisObject :
             selected_energy = array_energy_species[-dic_nb_dfct[sp]]
             dic_species_energy[sp] = selected_energy
         
-        label_array = [ 0 if local_energy[id_at] < dic_species_energy[at.symbols] else 1 \
+        label_array = [ 0 if local_energy[id_at] < dic_species_energy[at.symbol] else 1 \
                        for id_at, at in enumerate(atoms) ]
 
         atoms.set_array('label-dfct',
@@ -576,8 +462,8 @@ class DfctAnalysisObject :
     def fit_logistic_regressor(self, species : str, inputs_properties : List[str] = ['mcd-distance']) -> None : 
         """Adjust logistic regressor based on inputs_properties 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         species : str
             Species for the regressor 
@@ -593,14 +479,14 @@ class DfctAnalysisObject :
                 raise NotImplementedError('{} : this property is not yet implemented'.format(prop))
 
 
-        self.logistic_model[species] = LogisticRegression()
+        #self.logistic_model[species] = LogisticRegression()
         list_species_atoms = self._get_all_atoms_species(species)
 
         if 'mcd-distance' in inputs_properties :
-            list_species_atoms = self._get_mcd_distance(list_species_atoms, species)
+            list_species_atoms = self.mcd_model._get_mcd_distance(list_species_atoms, species)
 
         if 'gmm-distance' in inputs_properties : 
-            list_species_atoms = self._get_gmm_distance(list_species_atoms, species)
+            list_species_atoms = self.gmm_model._get_gmm_distance(list_species_atoms, species)
 
         Xdata = []
         Ytarget = []
@@ -611,40 +497,32 @@ class DfctAnalysisObject :
 
         Xdata = np.array(Xdata)
         Ytarget = np.array(Ytarget)
-        self.logistic_model[species].fit(Xdata,Ytarget)
-        
-        #update meta logistic model
-        if len(self.meta_data_model) == 0 :
-            self.meta_data_model = inputs_properties
+        self.logistic_model._fit_logistic_model(Xdata, Ytarget, species, inputs_properties)
 
-        print('Score for {:s} logistic regressor is : {:1.4f}'.format(species,self.logistic_model[species].score(Xdata,Ytarget)))
+        print('Score for {:s} logistic regressor is : {:1.4f}'.format(species,self.logistic_model.models[species]['logistic_regressor'].score(Xdata,Ytarget)))
         return 
 
-    def _predict_logistic(self, species : str, array_desc : np.ndarray) -> np.ndarray : 
-        """Predict the logistic score for a given array of descriptor
-        
-        Parameters:
-        -----------
-
-        species : str 
-            Species associated to the descritpor array 
-
-        array_desc : np.ndarray 
-            Descriptor array (M,D)
-
-        Returns:
-        --------
-
-        np.ndarray 
-            Associated logistic score probabilities array (M,N_c) where N_c is the number of logistic classes
-        """
-        return self.logistic_model[species].predict_proba(array_desc)
+    #def _predict_logistic(self, species : str, array_desc : np.ndarray) -> np.ndarray : 
+    #    """Predict the logistic score for a given array of descriptor
+    #    
+    #    Parameters
+    #    ----------
+    #    species : str 
+    #        Species associated to the descritpor array 
+    #    array_desc : np.ndarray 
+    #        Descriptor array (M,D)
+    #    Returns:
+    #    --------
+    #    np.ndarray 
+    #        Associated logistic score probabilities array (M,N_c) where N_c is the number of logistic classes
+    #    """
+    #    return self.logistic_model[species].predict_proba(array_desc)
 
     def one_the_fly_logistic_analysis(self, atoms : Atoms) -> Atoms :
         """Perfrom logistic regression analysis
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms object containing a given configuration
@@ -660,7 +538,7 @@ class DfctAnalysisObject :
 
         # setting extra arrays for atoms 
         dic_prop = {}
-        for prop in self.meta_data_model :
+        for prop in self.logistic_model._get_metadata() :
             try : 
                 atoms.get_array(prop) 
             except :  
@@ -678,7 +556,7 @@ class DfctAnalysisObject :
         for id_at, at in enumerate(atoms) :
             miss_shaped_data = [ dic_prop[prop][id_at].tolist() for prop in dic_prop.keys() ]
             array_data = np.array([ list(more_itertools.collapse(miss_shaped_data)) ])
-            list_logistic_score.append( self._predict_logistic(at.symbol,array_data).flatten() )
+            list_logistic_score.append( self.logistic_model._predict_logistic(at.symbol,array_data).flatten() )
 
         atoms.set_array('logistic-score',
                         np.array(list_logistic_score),
@@ -692,8 +570,8 @@ class DfctAnalysisObject :
     def update_dfct(self, key_dfct : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0, elliptic : str = 'iso') -> None :
         """Method to update defect inside dictionnary
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         key_dfct : str 
             Type of defect to update (this method manage only ```vacancy``` and ```interstitial```)
@@ -728,8 +606,8 @@ class DfctAnalysisObject :
     def _aggregate_cluster(c1 : Cluster, c2 : Cluster) -> Cluster : 
         """Local method to aggregate two ```Cluster``` objects
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         c1 : Cluster
             First ```Cluster``` to aggregate
@@ -754,8 +632,8 @@ class DfctAnalysisObject :
     def AggregateClusters(self, dic_cluster : Dict[str,Cluster] ) -> Dict[str,Cluster] : 
         """General aggregation method for point defect cluster
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         dic_cluster : Dict[str,Cluster]
             Dictionnary of ```Cluster``` to aggregate
@@ -796,8 +674,8 @@ class DfctAnalysisObject :
     def VacancyAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
         """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms object to analyse 
@@ -826,8 +704,8 @@ class DfctAnalysisObject :
     def InterstialAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
         """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms object to analyse 
@@ -861,8 +739,8 @@ class DfctAnalysisObject :
                             params_dislocation : Dict[str,float | np.ndarray] = {}) -> None : 
         """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms object to analyse 
@@ -940,8 +818,8 @@ class DfctAnalysisObject :
     def GetAllPointDefectData(self, path2write : os.PathLike[str] = './point_dfct.data') -> None : 
         """Extracting data from point defect analysis...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         path2write : os.PathLike[str]
             Path to write data file
@@ -972,8 +850,8 @@ class DfctAnalysisObject :
     def GetDislocationsData(self, path2write : os.PathLike[str] = './dislocation.data', only_average_data : bool = False) -> None : 
         """Extracting data from dislocation analysis...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         path2write : os.PathLike[str]
             Path to write data file

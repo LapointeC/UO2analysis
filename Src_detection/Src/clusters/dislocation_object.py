@@ -15,10 +15,17 @@ class reference_structure(TypedDict) :
 
 class DislocationObject : 
     """DislocationObject class used to find and compute properties for a given subset of Atoms systems
-    Main properties which are globally computed : (i) the Nye tensor and (ii) the dictionnary dislocation ```Dict[str,ClusterDislo]```.
+    Main properties which are globally computed
+    
+    - (i) the Nye tensor 
+    - (ii) the dictionnary dislocation ```Dict[str,ClusterDislo]```.
 
     Each key of dislocation dictionnary contains ```ClusterDislo``` object which allows to compute local properties associated to each ```Cluster```
-    The local properties are stored in ```LocalLine``` object which contains : (i) ```local_normal``` , (ii) ```local_burger``` (computed with Nye tensor).
+    The local properties are stored in ```LocalLine``` object which contains
+    
+    - (i) ```local_normal``` 
+    - (ii) ```local_burger``` (computed with Nye tensor)
+    
     ```local_normal``` and ```local_burger``` allow to reconstruct dislocation properties ...
      
     """
@@ -32,8 +39,8 @@ class DislocationObject :
         which are called ```extended_system``` and ```full_system```. Rigourisly only ```extended_system``` is needed to compute deformation
         tensor and ```full_system``` is need to evaluate gradient of the deformation tensor needed to estimate Nye tensor !
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         system : Atoms 
             System to compute the Dislocation properties
@@ -96,8 +103,8 @@ class DislocationObject :
         """Build a sample line to generate the dislocation line. In order to build an efficient an accurate line, 
         selected atoms have to be sufficiently far to the previous one
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         rcut_line : float 
             Rcut in to be added in a ```ClusterDislo```
@@ -171,8 +178,8 @@ class DislocationObject :
             $q_{local_line,i} = \sum_{j \in neigh(i) q_{local_line,j}} \frac{e^{\Vert D_{local_line,j} \Vert}}{ sum_{j' \in neigh(i) q_{local_line,j'} e^{\Vert D_{local_line,j'} \Vert}}  }  $
 
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         neighour : np.ndarray 
             array of neighbours for EXTENDED_SYSTEM (M,N,3) for each line i -> { r_{neigh_i,n} - r_i }_{1 \leq n \leq N} (cartesian)
@@ -242,8 +249,8 @@ class DislocationObject :
         This method create a new ```ClusterDislo``` attribute called ```smooth_local_lines``` which have the same structure than ```local_lines```
 
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         nb_averaging_window : int
             Size of the averaging window 
@@ -292,7 +299,7 @@ class DislocationObject :
         """Compute the local burger vector for each point of the ```local_line```. If descriptor is not None, the 
         same reweighting procedure than in BuildOrderingLine is used to compute the local average Nye tensor
         
-        Paramters:
+        Parameters:
         ----------
 
         rcut_burger : float 
@@ -329,7 +336,7 @@ class DislocationObject :
         """Compute the local burger vector for each point of the ```smooth_local_line```. If descriptor is not None, the 
         same reweighting procedure than in BuildOrderingLine is used to compute the local average Nye tensor
         
-        Paramters:
+        Parameters:
         ----------
 
         rcut_burger : float 
@@ -369,8 +376,8 @@ class DislocationObject :
 
         !ADD THE REFERENCE FOR THE ROUTINE!
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
         
         theta_max : float
             Number of angle used to compute Nye tensor 
@@ -515,8 +522,8 @@ class DislocationObject :
                          smoothing_line : dict = None) -> None :
         """Full procedure method to build all the local dislocation properties...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         rcut_line : float 
             Rcut in to be added in a ```ClusterDislo```

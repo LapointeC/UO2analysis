@@ -1,18 +1,16 @@
 import os
-import warnings
 import shutil
 import re
 from os.path import join, isfile, islink
-from typing import List, Sequence, Tuple, Dict
+from typing import List, Dict
 
 from ase import Atoms
-import numpy as np
 
 ####################################################
 # DICTIOANNARY BUILDER FOR MILADY
 ####################################################
 class DBDictionnaryBuilder : 
-    """Build the general dictionnary object to launch Milady calcuation, specific format of the dictionnay is
+    """Build the general dictionnary object to launch Milady calculation, specific format of the dictionnay is
     detailed in DBManager doc object"""
     def __init__(self) : 
         self.dic : Dict[str,List[Atoms]] = {}

@@ -38,8 +38,8 @@ class NaiveOvitoModifier :
                  array_line : np.ndarray = None) -> None : 
         """Init method for ```NaiveOvitoModifier``` which just assign colors and transparency depending on ids given in dictionnaries ...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         dict_transparency : Dict[float, List[int]]
             Dictionnary containing as key transparency value and associated idx for atoms system
@@ -71,8 +71,8 @@ class NaiveOvitoModifier :
         def builder(dict : Dict[str | float, List[int] ], data : DataCollection, type = 'color') -> np.ndarray : 
             """Little function to build transparencies / colors arrays
             
-            Parameters:
-            -----------
+            Parameters
+            ----------
 
             dict : Dict[str | float, List[int]]
                 Colors / transparencies dictionnaries
@@ -118,8 +118,8 @@ class MCDModifier :
                  dict_color : dict = None) -> None :
         """Init method for ```MCDModifier```
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         init_transparency : float 
             Default value for transparency 
@@ -201,8 +201,8 @@ class LogisticModifier :
                  dict_color : Dict[int,str] = None) -> None :
         """Init method for ```LogisticModifier```
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         init_transparency : float 
             Default value for transparency 

@@ -1,24 +1,25 @@
 import numpy as np
 from ase import Atom, Atoms
-from typing import Dict, List, Any, Tuple
+from typing import Dict, Any, Tuple
 
 #######################################################
 ## Defect class
 #######################################################
 class Cluster : 
     """Cluster class which contains all data about atomic defects found in a given configuration.
-    This class contains the present list of methods : 
-        - append : update defect cluster with new atom object 
-        - update_extension : update the spatial extension of the cluster
-        - get_volume : return the volume of the cluster
-        - estimation_dfct_number : return an estimation of the number of defect inside the cluster (working for point defects...)
+    This class contains the present list of methods
+    
+    - append : update defect cluster with new atom object 
+    - update_extension : update the spatial extension of the cluster
+    - get_volume : return the volume of the cluster
+    - estimation_dfct_number : return an estimation of the number of defect inside the cluster (working for point defects...)
 
     """
     def __init__(self, atom : Atom, rcut : float, array_property : Dict[str,Any] = {}) -> None : 
         """Init method cluster class 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atom : Atom 
             First atom object indentifies to be part of the cluster 
@@ -42,8 +43,8 @@ class Cluster :
     def append(self, atom : Atom, array_property : Dict[str,Any] = {}, elliptic : str ='iso') -> None : 
         """Append new atom in the cluster
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atom : Atom 
             New atom to put in the cluster 
@@ -75,8 +76,8 @@ class Cluster :
     def _anistropic_extension(self, regularisation : float = 0.0) -> None : 
         """Distance covariance estimatior for anisotropic clusters
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         regularisation : float 
             regularisation parameter for covariance matrix pseudo inversion
@@ -94,8 +95,8 @@ class Cluster :
     def get_elliptic_distance(self, atom : Atom) -> float :
         """Compute distance to the elliptic covariance distances envelop
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atom : Atom
             Atom object to compute the elliptic distance
@@ -134,8 +135,8 @@ class LocalLine :
     def __init__(self, positions : np.ndarray, species : str) -> None : 
         """Init method for LocalLine
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         positions : np.ndarray 
             Inital position for the ```LocalLine```
@@ -153,8 +154,8 @@ class LocalLine :
     def update_center(self, center : np.ndarray) -> None : 
         """Update the center of ```LocalLine``` 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         center : np.ndarray 
             new center of the ```LocalLine```
@@ -165,8 +166,8 @@ class LocalLine :
     def update_burger(self, burger : np.ndarray) -> None : 
         """Update the burger vector of ```LocalLine``` 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         burger : np.ndarray 
             local burger vector of the ```LocalLine```
@@ -177,8 +178,8 @@ class LocalLine :
     def update_normal(self, normal : np.ndarray) -> None : 
         """Update the normal of ```LocalLine``` 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         normal : np.ndarray 
             local normal vector of the ```LocalLine```
@@ -189,8 +190,8 @@ class LocalLine :
     def update_norm_normal(self, norm : float) -> None : 
         """Update the norm of normal vector of ```LocalLine``` 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         norm : float
             norm of normal vector of ```LocalLine```
@@ -201,8 +202,8 @@ class LocalLine :
     def update_next(self, next_id : int) -> None : 
         """Update the next point the ```LocalLine``` 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         next_id : int
             next point id to build the whole dislocation line
@@ -225,18 +226,19 @@ class ClusterDislo(Cluster) :
     """```ClusterDislo``` class which contains all data about dislocation found in a given configuration. This class 
     inherit from ```Cluster``` class. 
 
-    This class contains the present list of methods : 
-        - append : update defect cluster with new atom object 
-        - update_extension : update the spatial extension of the cluster
-        !TO DO : new method to have size of line ...!
-        - get_lenght_line : return the lenght of the dislocation line 
-        - average_burger_vector_line : return the average burger vector along the dislocation line
+    This class contains the present list of methods
+
+    - append : update defect cluster with new atom object 
+    - update_extension : update the spatial extension of the cluster
+    - get_lenght_line : return the lenght of the dislocation line 
+    - average_burger_vector_line : return the average burger vector along the dislocation line
+    TODO : new method to have size of line ...!
     """
     def __init__(self, local_line_init : LocalLine, id_line_init : int, rcut_cluster : float = 4.5) -> None :
         """Init method for ```ClusterDislo``` 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         local_line_init : LocalLine 
             Associated first LocalLine object of the cluster 
@@ -261,8 +263,8 @@ class ClusterDislo(Cluster) :
     def append_dislo(self, local_line : LocalLine, id_line : int) -> None : 
         """Append new atom in the cluster
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atom : Atom 
             New atom to put in the cluster 

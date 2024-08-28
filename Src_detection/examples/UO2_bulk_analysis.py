@@ -3,7 +3,7 @@ import glob
 import pickle
 
 sys.path.insert(0,'../')
-from ..Src import DBManager, DBDictionnaryBuilder, \
+from Src import DBManager, DBDictionnaryBuilder, \
                   Milady, Regressor, Optimiser, Descriptor, \
                   my_cfg_reader, \
                   MCDAnalysisObject
@@ -20,9 +20,9 @@ plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
 path_bulk = '/home/lapointe/WorkML/UO2Analysis/data/thermique'
 dic_sub_class = {'600K':'01_000','300K':'00_000'}
 milady_compute = False
-pickle_data_file = 'dataUO2.pickle'
-pickle_model_file = 'GMM_UO2.pickle'
-metric_type = 'gmm'
+pickle_data_file = '../data/dataUO2.pickle'
+pickle_model_file = 'UO2.pickle'
+metric_type = 'mcd'
 #########################################################
 
 implemented_type = ['gmm', 'mcd']
@@ -45,7 +45,8 @@ if milady_compute :
     optimiser = Optimiser.Milady(weighted=True,
                                  fix_no_of_elements=2,
                                  chemical_elements=['U','O'],
-                                 weight_per_element=[0.9,0.8])
+                                 weight_per_element=[0.9,0.8],
+                                 desc_forces=False)
     regressor = Regressor.ComputeDescriptors(write_design_matrix=False)
     descriptor = Descriptor.BSO4(r_cut=6.0,j_max=4.0,lbso4_diag=False)
 
@@ -95,6 +96,6 @@ else :
                                                                 'weight_concentration_prior':0.8})
     print()
     print('... Writing pickle object ...')
-    pickle.dump(analysis_mcd, open('{:s}_{:s}'%(metric_type,pickle_model_file),'wb'))
+    analysis_mcd.__dict__[f'{metric_type}_model']._write_pkl(f'{metric_type}_{pickle_model_file}')
     print('... Pickle object is written :) ...')
     plt.show()

@@ -177,7 +177,7 @@ def write_milady_poscar(filename : str,
 def read_database_milady(pathway : str) -> Tuple[Union[List[Atoms],Atoms], Dict[str,any]] :
     """Generate Atoms | List[Atoms] obejct from a given database of milady POSCAR
     
-    Parameters: 
+    Parameters 
     ----------
 
     pathway: str

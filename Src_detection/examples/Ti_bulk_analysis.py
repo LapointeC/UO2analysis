@@ -6,7 +6,7 @@ from ase import Atoms
 from ase.io import read
 
 sys.path.insert(0,'../')
-from ..Src import DBManager, DBDictionnaryBuilder, \
+from Src import DBManager, DBDictionnaryBuilder, \
                   Optimiser, Regressor, Descriptor, Milady, \
                   MCDAnalysisObject
 
@@ -49,7 +49,8 @@ if milady_compute :
     dbmodel = DBManager(model_ini_dict=Db_dic_builder._generate_dictionnary())
     print('... All configurations have been embeded in Atoms objects ...')
     optimiser = Optimiser.Milady(fix_no_of_elements=1,
-                                 chemical_elements=['Ti'])
+                                 chemical_elements=['Ti'],
+                                 desc_forces=False)
     regressor = Regressor.ComputeDescriptors(write_design_matrix=False)
     descriptor = Descriptor.BSO4(r_cut=5.0,j_max=4.0,lbso4_diag=False)
 
