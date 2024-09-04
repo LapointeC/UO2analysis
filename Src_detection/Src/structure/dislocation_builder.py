@@ -348,26 +348,27 @@ class DislocationsBuilder :
             dislocation = self.build_polygonal_loop(dic_shape['nb_edge'],
                                                     dict_shape=restricted_dict_shape)
 
-        dislocation.set_cell( (len(dislocation)/len(self.cubic_supercell))*dislocation.cell[:], scale_atoms=True)
+        lenght_scale = np.power(len(dislocation)/len(self.cubic_supercell), 0.3333)
+        dislocation.set_cell(lenght_scale*dislocation.cell[:], scale_atoms=True)
         self.write_dislocation(dislocation,
                                writing_path,
                                format)
 
         return 
 
-###################################
-## INPUTS
-###################################
-inputs_dict : InputsDictDislocationBuilder = {'structure':'BCC',
-               'a0':2.8853,
-               'size_loop':25.0,
-               'scale_loop':3.0,
-               'orientation_loop':np.array([0.0,0.0,1.0]),
-               'element':'Fe'}
 ####################################
+### INPUTS
+####################################
+#inputs_dict : InputsDictDislocationBuilder = {'structure':'BCC',
+#               'a0':2.8853,
+#               'size_loop':25.0,
+#               'scale_loop':3.0,
+#               'orientation_loop':np.array([0.0,0.0,1.0]),
+#               'element':'Fe'}
+#####################################
 
 
-dislo_obj = DislocationsBuilder(inputs_dict)
-dislo_obj.BuildDislocation(writing_path='./dislo.poscar',
-                           format='vasp',
-                           dic_shape=None)
+#dislo_obj = DislocationsBuilder(inputs_dict)
+#dislo_obj.BuildDislocation(writing_path='./dislo.poscar',
+#                           format='vasp',
+#                           dic_shape=None)
