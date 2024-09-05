@@ -1,6 +1,6 @@
 import os
 import numpy as np
-from lattice import SolidAse
+from .lattice import SolidAse
 
 from scipy.linalg import expm
 from ase.io import write
@@ -22,9 +22,11 @@ class DislocationsBuilder :
         self.implemented_lattice = ['BCC', 'FCC']
         self.possible_plane = self.recursive_unit_vectors()
         self.normal_vector = self.param_dict['orientation_loop']/np.linalg.norm(self.param_dict['orientation_loop'])
-        self.center = None
-        self.burger_norm = None 
-
+        
+        self.center : np.ndarray = None
+        self.burger_norm : float = None 
+        self.ase_system : Atoms = None
+        
         if self.param_dict['structure'] not in self.implemented_lattice : 
             raise NotImplementedError(f'{self.param_dict["structure"]} : structure is not implemented ...')
 
@@ -228,7 +230,8 @@ class DislocationsBuilder :
         #set new property ! 
         in_plane_array[mask] = 1.0
         self.cubic_supercell.set_array('in-plane', 
-                                       in_plane_array.reshape((Natoms,1)),
+                                       #in_plane_array.reshape((Natoms,1)),
+                                       in_plane_array,
                                        dtype=float)
         
         Nat_in_plane = len([el for el in in_plane_array if el > 0.0])
@@ -261,8 +264,18 @@ class DislocationsBuilder :
                                      positions_sia_idx)
             extra_atoms += xtra
 
+        # visualisation
+        extra_atoms.set_array('defect',
+                              np.ones((len(extra_atoms),)),
+                              dtype=float)  
+
         dislocation_system = self.cubic_supercell.copy()
         del dislocation_system[[idx for idx in in_loop_index_array]]
+
+        #visualisation
+        dislocation_system.set_array('defect',
+                                     np.zeros((len(dislocation_system),)),
+                                     dtype=float)
 
         return dislocation_system + extra_atoms
     
@@ -337,7 +350,8 @@ class DislocationsBuilder :
     def BuildDislocation(self, 
                          writing_path : os.PathLike[str] = '/dislo.geom',
                          format : str = 'vasp',
-                         dic_shape : dict = None) -> None :
+                         dic_shape : dict = None,
+                         ovito_mode : bool = False) -> None :
         
         self.get_atoms_in_plane()
         if dic_shape is None :
@@ -350,25 +364,13 @@ class DislocationsBuilder :
 
         lenght_scale = np.power(len(dislocation)/len(self.cubic_supercell), 0.3333)
         dislocation.set_cell(lenght_scale*dislocation.cell[:], scale_atoms=True)
-        self.write_dislocation(dislocation,
+        
+        if not ovito_mode : 
+            self.write_dislocation(dislocation,
                                writing_path,
                                format)
 
+        else : 
+            self.ase_system = dislocation
+
         return 
-
-####################################
-### INPUTS
-####################################
-#inputs_dict : InputsDictDislocationBuilder = {'structure':'BCC',
-#               'a0':2.8853,
-#               'size_loop':25.0,
-#               'scale_loop':3.0,
-#               'orientation_loop':np.array([0.0,0.0,1.0]),
-#               'element':'Fe'}
-#####################################
-
-
-#dislo_obj = DislocationsBuilder(inputs_dict)
-#dislo_obj.BuildDislocation(writing_path='./dislo.poscar',
-#                           format='vasp',
-#                           dic_shape=None)

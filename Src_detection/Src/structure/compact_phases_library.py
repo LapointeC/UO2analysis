@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.linalg import expm
 
-from typing import TypedDict, Dict
+from typing import Dict
 
 #######################
 ## C15

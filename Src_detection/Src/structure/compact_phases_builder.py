@@ -1,13 +1,11 @@
 import os
 import numpy as np
 from warnings import warn
-from lattice import SolidAse
-from compact_phases_library import MetaOctahedron, Octa, MetaIcosahedron, Ico
+from .lattice import SolidAse
+from .compact_phases_library import MetaOctahedron, Octa, MetaIcosahedron, Ico
 
-from scipy.linalg import expm
 from ase.io import write
 from ase import Atoms, Atom
-
 
 import xml.etree.ElementTree as ET
 import random
@@ -215,6 +213,9 @@ class C15Builder :
                         list_position_C15.append(new_C15_position)
                         C15_atoms.append( Atom( self.dict_param['element'], new_C15_position ) )
 
+        #C15_atoms.set_array('defect',
+        #                    np.ones(len(C15_atoms),),
+        #                    dtype=float)
         return C15_atoms
     
     def remove_atoms_in_system(self, system : Atoms, tolerance : float = 1e-3) -> Atoms :
@@ -271,7 +272,8 @@ class C15Builder :
 
     def BuildC15Cluster(self,
                         writing_path : os.PathLike[str] = './C15.geom',
-                        format : str = 'vasp') -> None : 
+                        format : str = 'vasp',
+                        ovito_mode : bool = False) -> None : 
         """Build C15 system from ```C15Center``` dictionnary 
         
         Parameters
@@ -287,20 +289,31 @@ class C15Builder :
         #Build C15 system
         C15_atoms = self.build_C15_system()
         self.extra_atom = self.remove_atoms_in_system(C15_atoms)
+        
+        #Assign defect value for C15 system ...
+        self.extra_atom.set_array('defect',
+                            np.ones(len(self.extra_atom),),
+                            dtype=float)       
+
+        print(f'... I put {len(self.extra_atom)} C15 atoms in the system')
+
         Natoms_bulk = len(self.cubic_supercell_unit)
         self.cubic_supercell_unit = self.remove_atoms_in_system(self.cubic_supercell_unit)
+
+        #Assign defect value for bulk system ...
+        self.cubic_supercell_unit.set_array('defect',
+                            np.zeros(len(self.cubic_supercell_unit),),
+                            dtype=float)
 
         # rescale the system to have the true lattice parameter
         self.C15_system = self.cubic_supercell_unit + self.extra_atom
         lenght_scale = np.power(len(self.C15_system)/Natoms_bulk, 0.3333)
         self.C15_system.set_cell(self.cubic_supercell_unit.cell[:]*lenght_scale*self.dict_param['a0'], scale_atoms=True)
-        self.write_C15(self.C15_system,
-                       writing_path,
-                       format)
         
-        #self.extra_atom.set_cell(self.size*np.eye(3))
-        #self.extra_atom.set_cell(self.extra_atom.cell[:]*lenght_scale*self.dict_param['a0'], scale_atoms=True)
-        #self.write_C15(self.extra_atom, writing_path, format)
+        if not ovito_mode :
+            self.write_C15(self.C15_system,
+                           writing_path,
+                           format)
 
         return 
 
@@ -311,7 +324,7 @@ class A15Center(TypedDict) :
     center : np.ndarray
     type : str
 
-class A15Build : 
+class A15Builder : 
     def __init__(self, dict_param : InputsCompactPhases, 
                  path_inputs : os.PathLike[str] = 'XML') -> None : 
         self.isocahedron = MetaIcosahedron()
@@ -351,13 +364,3 @@ class A15Build :
         for key in self.centerC15.keys() : 
             if [k for k in self.centerC15[key].keys()] not in [['type', 'center'],['center', 'type']] :
                 raise TimeoutError(f'Missing type or center for {key}')
-
-
-dic_param = {'a0':2.853,
-             'element':'Fe',
-             'scale_factor':1.2}
-path_xml = '/home/lapointe/WorkML/Full_unseen_framework/Src/structure/c15.xml'
-
-C15obj = C15Builder(dic_param, path_inputs=path_xml)
-C15obj.BuildC15Cluster(writing_path='C15.poscar',
-                       format='vasp')
