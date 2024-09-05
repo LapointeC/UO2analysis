@@ -19,6 +19,12 @@ class InputsCompactPhases(TypedDict) :
     scale_factor : float
 
 
+class Dumbells(TypedDict) : 
+    """Little class to build ```Dumbells``` clusters """
+    center : np.ndarray
+    orientation : np.ndarray
+
+
 ##############
 ## C15
 ##############
@@ -50,6 +56,7 @@ class C15Builder :
         self.path_inputs = path_inputs
 
         self.centerC15 : Dict[int, C15Center] = {}
+        self.dumbells : Dict[int, Dumbells] = {}
         self.size = None
         self.cubic_supercell_unit : Atoms = None
         self.extra_atom  : Atoms = None
@@ -61,20 +68,32 @@ class C15Builder :
             print(f'... Initial number of atoms in supercell is {len(self.cubic_supercell_unit)}')
 
     def InputsParser(self) -> None : 
-        """Read XML file correspondinf to the center of C15 atoms"""
+        """Read XML file correspondinf to the center of ```A15``` atoms"""
         xml_root = ET.parse(self.path_inputs)
         for xml_param in xml_root.getroot() : 
-            if xml_param.tag == 'Centers':
+            if xml_param.tag == 'C15Centers':
                 for id_cent, cent in enumerate(xml_param) : 
                     if not id_cent in self.centerC15.keys() : 
                         self.centerC15[id_cent] = {}
                     self.centerC15[id_cent]['center'] = np.array([int(el) for el in cent.text.split()])
 
-            if xml_param.tag == 'Type':
+            if xml_param.tag == 'C15Type':
                 for id_type, type in enumerate(xml_param) : 
                     if not id_type in self.centerC15.keys() : 
                         self.centerC15[id_type] = {}
                     self.centerC15[id_type]['type'] = type.text
+
+            if xml_param.tag == 'DumbellCenters':
+                for id_cent, cent in enumerate(xml_param) : 
+                    if not id_cent in self.dumbells.keys() : 
+                        self.dumbells[id_cent] = {}
+                    self.dumbells[id_cent]['center'] = np.array([int(el) for el in cent.text.split()])
+
+            if xml_param.tag == 'DumbellOrientation':
+                for id_orien, orien in enumerate(xml_param) : 
+                    if not id_orien in self.dumbells.keys() : 
+                        self.dumbells[id_orien] = {}
+                    self.dumbells[id_orien]['orientation'] = np.array([float(el) for el in orien.text.split()])
 
         self.check_out_parser()
 
@@ -82,7 +101,11 @@ class C15Builder :
         """Check if contain of XML file is coherent !""" 
         for key in self.centerC15.keys() : 
             if [k for k in self.centerC15[key].keys()] not in [['type', 'center'],['center', 'type']] :
-                raise TimeoutError(f'Missing type or center for {key}')
+                raise TimeoutError(f'Missing type or center for {key} (C15)')
+
+        for key in self.dumbells.keys() :
+            if [k for k in self.dumbells[key].keys()] not in [['orientation', 'center'],['center', 'orientation']] :
+                raise TimeoutError(f'Missing orientation or center for {key} (Dumbell)')
 
     def compute_cell_size(self) -> List[int] : 
         """Compute the size of the cubic supercell to put the dislocation
@@ -232,13 +255,33 @@ class C15Builder :
                         C15_atoms.append( Atom( self.dict_param['element'], new_C15_position ) )
 
         return C15_atoms
-    
-    def remove_atoms_in_system(self, system : Atoms, tolerance : float = 1e-3) -> Atoms :
+
+    def build_dumbell_system(self) -> Atoms :  
+        """Create ```Atoms``` object containing dumbell atoms
+        
+        Returns
+        -------
+
+        Atoms 
+            ```Atoms``` Object containig dumbells
+        """      
+        dumbells_atoms = Atoms()
+        for _, dumb in self.dumbells.items() : 
+            coordinates_dumb = np.array([ dumb['center'] + 0.5*dumb['orientation'],
+                                          dumb['center'] - 0.5*dumb['orientation']])
+            dumbells_atoms += Atoms( 2*[self.dict_param['element']], coordinates_dumb)
+
+        return dumbells_atoms
+
+    def remove_atoms_in_system(self, C15_system : Atoms, system : Atoms, tolerance : float = 1e-3) -> Atoms :
         """Removing from ```removeatom``` attribute in order to put ```C15``` into bulk system
         
         Parameters
         ----------
 
+        C15_system : Atoms 
+            ```Atoms``` object containing ```C15``` cluster
+        
         system : Atoms 
             ```Atoms``` object where ```removeatom``` will be removed
 
@@ -255,10 +298,19 @@ class C15Builder :
         """
         ToRemoveCoordinate = np.array([ self.octahedron.typeOcta[val['type']].removeatom.T + val['center'] for _, val in self.centerC15.items() ])
         ToRemoveCoordinate = ToRemoveCoordinate.reshape((3,len(self.centerC15)*6)).T
+        ToRemoveCoordinateC15 = C15_system.positions
 
         list_idx2remove = []
+
+        #vacancies
         for idx, pos in enumerate(system.positions) : 
             array_distance_idx = np.linalg.norm( ToRemoveCoordinate - pos, axis = 1)
+            if np.amin(array_distance_idx) < tolerance : 
+                list_idx2remove.append(idx)
+
+        #C15
+        for idx, pos in enumerate(system.positions) : 
+            array_distance_idx = np.linalg.norm( ToRemoveCoordinateC15 - pos, axis = 1)
             if np.amin(array_distance_idx) < tolerance : 
                 list_idx2remove.append(idx)
 
@@ -268,7 +320,7 @@ class C15Builder :
         return new_system
 
     def write_C15(self, atoms : Atoms, path_writing : os.PathLike[str], format : str) -> None :
-        """Write geometry file for dislocation loop 
+        """Write geometry file for ```C15``` cluster
         
         Parameters
         ----------
@@ -302,18 +354,20 @@ class C15Builder :
         """
         
         #Build C15 system
-        C15_atoms = self.build_C15_system()
-        self.extra_atom = self.remove_atoms_in_system(C15_atoms)
-        
+        self.extra_atom = self.build_C15_system()        
+
+        #add dumbell !
+        self.extra_atom += self.build_dumbell_system()
+
         #Assign defect value for C15 system ...
         self.extra_atom.set_array('defect',
                             np.ones(len(self.extra_atom),),
                             dtype=float)       
 
-        print(f'... I put {len(self.extra_atom)} C15 atoms in the system')
+        print(f'... I put {len(self.extra_atom)} A15 atoms in the system')
 
         Natoms_bulk = len(self.cubic_supercell_unit)
-        self.cubic_supercell_unit = self.remove_atoms_in_system(self.cubic_supercell_unit)
+        self.cubic_supercell_unit = self.remove_atoms_in_system(self.extra_atom, self.cubic_supercell_unit)
 
         #Assign defect value for bulk system ...
         self.cubic_supercell_unit.set_array('defect',
@@ -363,6 +417,7 @@ class A15Builder :
         self.path_inputs = path_inputs
 
         self.centerA15 : Dict[int, A15Center] = {}
+        self.dumbells : Dict[int,Dumbells] = {}
         self.size = None
         self.cubic_supercell_unit : Atoms = None
         self.extra_atom  : Atoms = None
@@ -377,17 +432,29 @@ class A15Builder :
         """Read XML file correspondinf to the center of ```A15``` atoms"""
         xml_root = ET.parse(self.path_inputs)
         for xml_param in xml_root.getroot() : 
-            if xml_param.tag == 'Centers':
+            if xml_param.tag == 'A15Centers':
                 for id_cent, cent in enumerate(xml_param) : 
                     if not id_cent in self.centerA15.keys() : 
                         self.centerA15[id_cent] = {}
                     self.centerA15[id_cent]['center'] = np.array([int(el) for el in cent.text.split()])
 
-            if xml_param.tag == 'Type':
+            if xml_param.tag == 'A15Type':
                 for id_type, type in enumerate(xml_param) : 
                     if not id_type in self.centerA15.keys() : 
                         self.centerA15[id_type] = {}
                     self.centerA15[id_type]['type'] = type.text
+
+            if xml_param.tag == 'DumbellCenters':
+                for id_cent, cent in enumerate(xml_param) : 
+                    if not id_cent in self.dumbells.keys() : 
+                        self.dumbells[id_cent] = {}
+                    self.dumbells[id_cent]['center'] = np.array([int(el) for el in cent.text.split()])
+
+            if xml_param.tag == 'DumbellOrientation':
+                for id_orien, orien in enumerate(xml_param) : 
+                    if not id_orien in self.dumbells.keys() : 
+                        self.dumbells[id_orien] = {}
+                    self.dumbells[id_orien]['orientation'] = np.array([float(el) for el in orien.text.split()])
 
         self.check_out_parser()
 
@@ -395,7 +462,11 @@ class A15Builder :
         """Check if contain of XML file is coherent !""" 
         for key in self.centerA15.keys() : 
             if [k for k in self.centerA15[key].keys()] not in [['type', 'center'],['center', 'type']] :
-                raise TimeoutError(f'Missing type or center for {key}')
+                raise TimeoutError(f'Missing type or center for {key} (C15)')
+
+        for key in self.dumbells.keys() :
+            if [k for k in self.dumbells[key].keys()] not in [['orientation', 'center'],['center', 'orientation']] :
+                raise TimeoutError(f'Missing orientation or center for {key} (Dumbell)')
     
     def compute_cell_size(self) -> List[int] : 
         """Compute the size of the cubic supercell to put the dislocation
@@ -497,12 +568,32 @@ class A15Builder :
 
         return A15_atoms
 
-    def remove_atoms_in_system(self, system : Atoms, tolerance : float = 1e-3) -> Atoms :
-        """Removing from ```removeatom``` attribute in order to put ```A15``` into bulk system
+    def build_dumbell_system(self) -> Atoms :  
+        """Create ```Atoms``` object containing dumbell atoms
+        
+        Returns
+        -------
+
+        Atoms 
+            ```Atoms``` Object containig dumbells
+        """      
+        dumbells_atoms = Atoms()
+        for _, dumb in self.dumbells.items() : 
+            coordinates_dumb = np.array([ dumb['center'] + 0.5*dumb['orientation'],
+                                          dumb['center'] - 0.5*dumb['orientation']])
+            dumbells_atoms += Atoms( 2*[self.dict_param['element']], coordinates_dumb)
+
+        return dumbells_atoms
+
+    def remove_atoms_in_system(self, A15_system : Atoms, system : Atoms, tolerance : float = 1e-3) -> Atoms :
+        """Removing from ```removeatom``` attribute in order to put ```C15``` into bulk system
         
         Parameters
         ----------
 
+        C15_system : Atoms 
+            ```Atoms``` object containing ```C15``` cluster
+        
         system : Atoms 
             ```Atoms``` object where ```removeatom``` will be removed
 
@@ -519,10 +610,19 @@ class A15Builder :
         """
         ToRemoveCoordinate = np.array([ self.isocahedron.typeIco[val['type']].removeatom.T + val['center'] for _, val in self.centerA15.items() ])
         ToRemoveCoordinate = ToRemoveCoordinate.reshape((3,len(self.centerA15)*6)).T
+        ToRemoveCoordinateA15 = A15_system.positions
 
         list_idx2remove = []
+
+        #vacancies
         for idx, pos in enumerate(system.positions) : 
             array_distance_idx = np.linalg.norm( ToRemoveCoordinate - pos, axis = 1)
+            if np.amin(array_distance_idx) < tolerance : 
+                list_idx2remove.append(idx)
+
+        #A15
+        for idx, pos in enumerate(system.positions) : 
+            array_distance_idx = np.linalg.norm( ToRemoveCoordinateA15 - pos, axis = 1)
             if np.amin(array_distance_idx) < tolerance : 
                 list_idx2remove.append(idx)
 
@@ -530,9 +630,9 @@ class A15Builder :
         del new_system[[idx for idx in list_idx2remove]]
         
         return new_system
-
+    
     def write_A15(self, atoms : Atoms, path_writing : os.PathLike[str], format : str) -> None :
-        """Write geometry file for dislocation loop 
+        """Write geometry file for ```A15``` cluster 
         
         Parameters
         ----------
@@ -566,18 +666,20 @@ class A15Builder :
         """
         
         #Build A15 system
-        A15_atoms = self.build_A15_system()
-        self.extra_atom = self.remove_atoms_in_system(A15_atoms)
+        self.extra_atom = self.build_A15_system()
         
+        #add dumbell !
+        self.extra_atom += self.build_dumbell_system()
+
         #Assign defect value for A15 system ...
         self.extra_atom.set_array('defect',
                             np.ones(len(self.extra_atom),),
                             dtype=float)       
 
-        print(f'... I put {len(self.extra_atom)} A15 atoms in the system')
+        print(f'... I put {len(self.extra_atom)} (A15) atoms in the system')
 
         Natoms_bulk = len(self.cubic_supercell_unit)
-        self.cubic_supercell_unit = self.remove_atoms_in_system(self.cubic_supercell_unit)
+        self.cubic_supercell_unit = self.remove_atoms_in_system(self.extra_atom, self.cubic_supercell_unit)
 
         #Assign defect value for bulk system ...
         self.cubic_supercell_unit.set_array('defect',

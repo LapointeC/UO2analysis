@@ -7,6 +7,26 @@ from typing import Dict
 ## C15
 #######################
 class Octa : 
+    """Basic class for ```C15``` clusters
+    
+    Attributes 
+    ----------
+
+    center : np.ndarray 
+        Center of ```C15``` cluster
+
+    link : np.ndarray 
+        4 possible closest vectors to new ```C15``` cluster
+
+    atom : np.ndarray
+        4 corner of thetrahedron which are center of gaos (triangles) configurations
+
+    removeatom : np.ndarray
+        6 atoms to remove on perfect lattice 
+
+    gaos : np.ndarray 
+        Coordinate of 4 gaos configurations associated to thetrahedron corners
+    """
     def __init__(self) : 
         self.center = np.zeros(3)
         self.link = np.zeros((3, 4))
@@ -15,6 +35,12 @@ class Octa :
         self.gaos = np.zeros((3, 3, 4))
 
 class MetaOctahedron:
+    """Build all possible types of ```Octa``` to build ```C15``` clusters
+    
+    Implemented type :
+        - ```type1```
+        - ```type2```
+    """
     def __init__(self):
         self.typeOcta : Dict[str, Octa] = {'type1':Octa(),
                                            'type2':Octa()}
@@ -90,6 +116,26 @@ class MetaOctahedron:
 ## A15
 #######################
 class Ico :
+    """Basic class for ```A15``` clusters
+    
+    Attributes 
+    ----------
+
+    center : np.ndarray 
+        Center of ```A15``` cluster
+
+    link : np.ndarray 
+        4 possible closest vectors to new ```A15``` cluster
+
+    sia : np.ndarray
+        12 sia to put in fcc lattice
+
+    removeatom : np.ndarray
+        6 atoms to remove on perfect lattice 
+
+    add : np.ndarray 
+        Last atom to add in the center
+    """
     def __init__(self) : 
         self.center = np.zeros(3)
         self.link = np.zeros((3, 4))
@@ -98,6 +144,12 @@ class Ico :
         self.add = np.zeros((3, 1))
 
 class MetaIcosahedron:
+    """Build all possible types of ```Ico``` to build ```A15``` clusters
+    
+    Implemented type :
+        - ```type1```
+        - ```type2```
+    """
     def __init__(self):
         self.typeIco : Dict[str, Ico] = {'type1':Ico(),
                                          'type2':Ico()}
