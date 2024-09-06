@@ -1,5 +1,6 @@
 import os
 import numpy as np
+from warnings import warn
 from .lattice import SolidAse
 
 from scipy.linalg import expm
@@ -7,6 +8,7 @@ from ase.io import write
 from ase import Atoms
 
 from typing import List, Tuple, TypedDict
+from ..tools import timeit
 
 class InputsDictDislocationBuilder(TypedDict) :
     """Little class for ```dislocation_builder``` inputs 
@@ -135,9 +137,15 @@ class DislocationsBuilder :
 
         return list_vector
 
-    def get_orthogonal_vector(self) -> np.ndarray :
+    def get_orthogonal_vector(self, tolerance : float = 1e-3) -> np.ndarray :
         """Get an orthogonal vector to the dislocation plane 
         
+        Parameters
+        ----------
+
+        tolerance : float 
+            tolerance of dot product for orthogonality
+
         Returns
         -------
 
@@ -146,14 +154,18 @@ class DislocationsBuilder :
         """
         orientation = self.param_dict['orientation_loop']
         id_min = np.argmin( [np.abs(np.dot(orientation, np.array(el))) for el in self.possible_plane ] )
+
+        dot_product = np.abs(np.dot(orientation, np.array(self.possible_plane[id_min])))
+        if dot_product > tolerance : 
+            warn(f'Could not find orthogonal vector to the plane n.v = {dot_product}')
+
         return np.array(self.possible_plane[id_min])
 
     def rotation_matrix(self, axis : np.ndarray) :
         """build the rotation matrix method arrond a given axis"""
         return lambda theta : expm(np.cross(np.eye(3), axis/np.linalg.norm(axis)*theta))
 
-    def build_polygon_coordinates(self, nb_edge : int = 4, dict_shape : dict = {'kind':'circular',
-                                                                                'r':1.0}) -> Tuple[List[np.ndarray], np.ndarray] : 
+    def build_polygon_coordinates(self, nb_edge : int = 4, dict_shape : dict = {'kind':'circular'}) -> Tuple[List[np.ndarray], np.ndarray] : 
         """Build the coordinates of regular polygon vertices in the dislocation plane coordinates
         
         Parameters
@@ -164,7 +176,7 @@ class DislocationsBuilder :
 
         dic_shape : dict 
             Dictionnary which define the kink of shape for dislocation
-            Example : ```{'nb_edge':4,'kind':'elliptic','a':1.0,'b':2.0}``` or ```{'nb_edge':4,'kind':'circular','r':1.0}```
+            Example : ```{'nb_edge':4,'kind':'elliptic','b/a':2.0}``` or ```{'nb_edge':4,'kind':'circular'}```
         
         
         Returns
@@ -174,7 +186,7 @@ class DislocationsBuilder :
             List of polygon vertices coordinates in the dislocation plane coordinates
         
         np.ndarray 
-            Passage matrix between vertices coordinates and cartesian coordinates ```(V_{x_i 1}, ... ,V_{x_i nb_edge})```
+            Passage matrix between vertices coordinates and cartesian coordinates ```(V_{x_i 1}, V_{x_i 2} ,V_{x_i 3})```
         """
 
 
@@ -196,21 +208,34 @@ class DislocationsBuilder :
             float  
                 r(theta)
             """
-            exentricity = np.sqrt(1.0 - (dict_shape['b']**2)/(dict_shape['a']**2))
-            return dict_shape['b']/np.sqrt(1 - exentricity**2*np.cos(theta))
+            exentricity = np.sqrt(1.0 - dict_shape['b/a']**2)
+            scaled_a2 = 0.25*self.param_dict['size_loop']**2*(1.0 - exentricity**2)
+            return np.sqrt(scaled_a2/(1.0 - exentricity**2*np.cos(theta)**2 ))
 
         """Build polygon coordinates for non-circular dislocation"""
         in_plane_vector = self.get_orthogonal_vector()
         last_vector = np.cross(self.normal_vector,in_plane_vector)
-        passage_matrix = np.concatenate((in_plane_vector,last_vector,self.normal_vector), axis=1)
+        passage_matrix = np.concatenate((in_plane_vector.reshape((3,1)) / np.linalg.norm(in_plane_vector),
+                                        last_vector.reshape((3,1)) / np.linalg.norm(last_vector) ,
+                                        self.normal_vector.reshape((3,1)) ), axis=1)
+
         rotation_matrix_normal = self.rotation_matrix(self.normal_vector)
 
         list_theta = [ 2*np.pi*k/nb_edge for k in range(nb_edge) ]
 
         if dict_shape['kind'] == 'circular':
-            list_vector = [dict_shape['r']*rotation_matrix_normal(theta)@in_plane_vector for theta in list_theta ]
+            #in_plane_vector = np.array([1., 0., 0.])
+            list_vector = [0.5*self.param_dict['size_loop']*rotation_matrix_normal(theta)@in_plane_vector for theta in list_theta ]
 
         elif dict_shape['kind'] == 'elliptic' : 
+            
+            #sanity check !
+            if dict_shape['b/a'] > 1.0 :
+                    raise TimeoutError(f'b/a shoud be less than 1.0 : {dict_shape["b/a"]}')
+            if not 'b/a' in dict_shape.keys() :
+                raise NotImplementedError(f'b/a key is missing to build elliptic loop...')
+            
+            #in_plane_vector = np.array([1.,0.,0.])
             list_vector = [r(dict_shape,theta)*rotation_matrix_normal(theta)@in_plane_vector for theta in list_theta ]
 
         else :
@@ -272,7 +297,6 @@ class DislocationsBuilder :
         #set new property ! 
         in_plane_array[mask] = 1.0
         self.cubic_supercell.set_array('in-plane', 
-                                       #in_plane_array.reshape((Natoms,1)),
                                        in_plane_array,
                                        dtype=float)
         
@@ -329,8 +353,7 @@ class DislocationsBuilder :
         return dislocation_system + extra_atoms
     
     def build_polygonal_loop(self, nb_edge : int = 4, dict_shape : dict = {'kind':'elliptic',
-                                                                                'a':1.0,
-                                                                                'b':2.0}) -> Atoms : 
+                                                                                'b/a':2.0}) -> Atoms : 
         """Build polygonal loop and return ```Atoms``` object containing the whole system 
         
         Parameters
@@ -341,8 +364,7 @@ class DislocationsBuilder :
 
         dic_shape : dict 
             Dictionnary which define the kink of shape for dislocation
-            Example : ```{'nb_edge':4,'kind':'elliptic','a':1.0,'b':2.0}``` or ```{'nb_edge':4,'kind':'circular','r':1.0}```
-        
+            Example : ```{'nb_edge':4,'kind':'elliptic','b/a':2.0}``` or ```{'nb_edge':4,'kind':'circular'}```
         Returns
         -------
 
@@ -354,29 +376,26 @@ class DislocationsBuilder :
         in_plane = self.cubic_supercell.get_array('in-plane')
         
         # build the local basis and vectors for polygon
-        list_vector, passage_matrix = self.build_polygon_coordinates(nb_edge=nb_edge,
+        list_vector, _ = self.build_polygon_coordinates(nb_edge=nb_edge,
                                                                      dict_shape=dict_shape)
-        cartesian_vectors = np.array([ (passage_matrix@vect)/np.linalg.norm(vect) for vect in list_vector ])
         centered_positions = positions - self.center
-        in_loop_index_array = []
+        
+        cartesian_vectors = np.array(list_vector)/np.linalg.norm(list_vector, axis=1).reshape((len(list_vector),1))
+        """in_loop_index_array = []
         for idx, pos in enumerate(centered_positions) : 
             if (pos@cartesian_vectors.T < np.linalg.norm(list_vector, axis=1)).all() and in_plane[idx] > 0.0 :
-                in_loop_index_array.append(idx)
+                in_loop_index_array.append(idx)"""
 
-        """
+        
         dot_products = centered_positions @ cartesian_vectors.T
-
-        # Get norms of list_vector
         list_vector_norms = np.linalg.norm(list_vector, axis=1)
 
         # Create a mask for the condition (pos @ cartesian_vectors.T < np.linalg.norm(list_vector, axis=1)).all()
-        mask = np.all(dot_products < list_vector_norms, axis=1)
-
-        # Combine the mask with the in_plane condition
-        final_mask = mask & (in_plane > 0.0)
+        mask_dot = np.all(dot_products < list_vector_norms, axis=1)
+        final_mask = mask_dot & (in_plane > 0.0)
 
         # Get the indices that satisfy the condition
-        in_loop_index_array = np.nonzero(final_mask)[0]"""
+        in_loop_index_array = np.nonzero(final_mask)[0]
 
 
         print(f'... I put {len(in_loop_index_array)} interstial atoms in the dislocation')
@@ -391,8 +410,18 @@ class DislocationsBuilder :
                                      positions_sia_idx)
             extra_atoms += extra
 
+        # visualisation
+        extra_atoms.set_array('defect',
+                              np.ones((len(extra_atoms),)),
+                              dtype=float)  
+
         dislocation_system = self.cubic_supercell.copy()
         del dislocation_system[[idx for idx in in_loop_index_array]]
+
+        #visualisation
+        dislocation_system.set_array('defect',
+                                     np.zeros((len(dislocation_system),)),
+                                     dtype=float)
 
         return dislocation_system + extra_atoms      
 
@@ -414,6 +443,7 @@ class DislocationsBuilder :
         write(path_writing, atoms, format=format)
         return 
     
+    @timeit
     def BuildDislocation(self, 
                          writing_path : os.PathLike[str] = '/dislo.geom',
                          format : str = 'vasp',
@@ -433,7 +463,7 @@ class DislocationsBuilder :
         
         dic_shape : dict 
             Dictionnary which define the kink of shape for dislocation if it sets to ```None``` circular loop is build otherwise polygonal loop is built :
-            Example : ```{'nb_edge':4,'kind':'elliptic','a':1.0,'b':2.0}``` or ```{'nb_edge':4,'kind':'circular','r':1.0}```
+            Example : ```{'nb_edge':4,'kind':'elliptic','b/a':2.0}``` or ```{'nb_edge':4,'kind':'circular'}```
         
         ovito_mode : bool 
             If bool is True there no geom file written

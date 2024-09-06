@@ -6,7 +6,7 @@ sys.path.append(os.getcwd())
 
 sys.path.insert(0,'../')
 from Src import InputsDictDislocationBuilder, DislocationsBuilder, \
-                  InputsCompactPhases, C15Builder, \
+                  InputsCompactPhases, C15Builder, A15Builder, \
                   FrameOvito, NaiveOvitoModifier
 
 
@@ -18,7 +18,7 @@ from PySide6.QtWidgets import QApplication
 ####################################
 ### INPUTS DISLOCATION !
 ####################################
-inputs_dict : InputsDictDislocationBuilder = {'structure':'BCC',
+dic_param_dislo : InputsDictDislocationBuilder = {'structure':'BCC',
                'a0':2.8853,
                'size_loop':25.0,
                'scale_loop':3.0,
@@ -26,25 +26,38 @@ inputs_dict : InputsDictDislocationBuilder = {'structure':'BCC',
                'element':'Fe'}
 #####################################
 
-###############################
+#####################################
 ##### INPUTS C15 !
-###############################
-dic_param : InputsCompactPhases = {'a0':2.853,
+#####################################
+dic_param_c15 : InputsCompactPhases = {'a0':2.853,
              'element':'Fe',
-             'scale_factor':1.2}
-path_xml = '../data/c15.xml'
-###############################
+             'scale_factor':2.0}
+path_xml_c15 = '../data/c15.xml'
+#####################################
+
+#####################################
+##### INPUTS A15 !
+#####################################
+dic_param_a15 : InputsCompactPhases = {'a0':3.6,
+             'element':'Ni',
+             'scale_factor':2.0}
+path_xml_a15 = '../data/a15.xml'
+#####################################
 
 
-print('... Building dislocation')
-dislo_obj = DislocationsBuilder(inputs_dict)
+print('... Building dislocation ...')
+dislo_obj = DislocationsBuilder(dic_param_dislo)
 dislo_obj.BuildDislocation(ovito_mode=True)
 print()
 print('... Building C15 ...')
-C15obj = C15Builder(dic_param, path_inputs=path_xml)
+C15obj = C15Builder(dic_param_c15, path_inputs=path_xml_c15)
 C15obj.BuildC15Cluster(ovito_mode=True)
+print()
+print('... Building A15 ...')
+A15obj = A15Builder(dic_param_a15, path_inputs=path_xml_a15)
+A15obj.BuildA15Cluster(ovito_mode=True)
 
-frame_object = FrameOvito([dislo_obj.ase_system, C15obj.C15_system])
+frame_object = FrameOvito([dislo_obj.ase_system, C15obj.C15_system, A15obj.A15_system])
 naive_modifier = NaiveOvitoModifier()
 naive_modifier.ASEArrayModifier({0.0:0.95,
                                  1.0:0.1},
