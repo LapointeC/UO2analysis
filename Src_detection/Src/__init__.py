@@ -4,8 +4,10 @@ from .mld import Milady, DBDictionnaryBuilder, GenerateMiladyInput, DBManager, O
 from .tools import FrameOvito, NaiveOvitoModifier, MCDModifier, LogisticModifier, my_cfg_reader, timeit, DataPhondy, RecursiveCheck, RecursiveBuilder, nearest_mode
 from .thermic import HarmonicThermicGenerator, ThermicSampling, ThermicFiting, FastEquivariantDescriptor
 from .metrics import PCA_, PCAModel, MCD, MCDModel, Logistic, LogisticRegressor, GMM, GMMModel
-from .structure import SolidAse
-from .surface import *
+from .structure import SolidAse, DislocationsBuilder, C15Builder, A15Builder, InputsDictDislocationBuilder, InputsCompactPhases
+#from .surface import NearestMode, SurfaceParser, AseVaspParser, CompositionFromBulk, BuilderSurfaceOriented, SetupVaspASE, WritingSlurm, \
+#                     SetupVaspSlabASE, RecursiveChecker, CheckProblems, SetRelaunch, DataSurface, ReadConvergenceFile, ExtractPathSlab, ComputeandWriteParametricSurfaceEnergy, \
+#                     ReadFileNormalVector, RelativeStabilityOnGrid, PlotProjectionHyperplaneInto2D, PlotAllHyperplanes3D
 
 def print_logo() -> None :
     """
@@ -20,6 +22,7 @@ def print_logo() -> None :
     ... C. Lapointe, A.-G. Goryaeva, M.-C. Marinica                               
     email: clovis.lapointe@cea.fr, mihai-cosmin.marinica@cea.fr"""
     print(welcome)
+    print()
     return 
                         
 print_logo()

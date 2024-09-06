@@ -8,7 +8,8 @@ from ase.io import write
 from ase import Atoms
 
 from typing import List, Tuple, TypedDict
-from ..tools import timeit
+from ..tools import get_neighborhood, timeit
+
 
 class InputsDictDislocationBuilder(TypedDict) :
     """Little class for ```dislocation_builder``` inputs 
@@ -213,7 +214,8 @@ class DislocationsBuilder :
             return np.sqrt(scaled_a2/(1.0 - exentricity**2*np.cos(theta)**2 ))
 
         """Build polygon coordinates for non-circular dislocation"""
-        in_plane_vector = self.get_orthogonal_vector()
+        #in_plane_vector = self.get_orthogonal_vector()
+        in_plane_vector = self.get_cristallographic_vector_in_plane()
         last_vector = np.cross(self.normal_vector,in_plane_vector)
         passage_matrix = np.concatenate((in_plane_vector.reshape((3,1)) / np.linalg.norm(in_plane_vector),
                                         last_vector.reshape((3,1)) / np.linalg.norm(last_vector) ,
@@ -224,18 +226,15 @@ class DislocationsBuilder :
         list_theta = [ 2*np.pi*k/nb_edge for k in range(nb_edge) ]
 
         if dict_shape['kind'] == 'circular':
-            #in_plane_vector = np.array([1., 0., 0.])
             list_vector = [0.5*self.param_dict['size_loop']*rotation_matrix_normal(theta)@in_plane_vector for theta in list_theta ]
 
         elif dict_shape['kind'] == 'elliptic' : 
-            
             #sanity check !
             if dict_shape['b/a'] > 1.0 :
                     raise TimeoutError(f'b/a shoud be less than 1.0 : {dict_shape["b/a"]}')
             if not 'b/a' in dict_shape.keys() :
                 raise NotImplementedError(f'b/a key is missing to build elliptic loop...')
             
-            #in_plane_vector = np.array([1.,0.,0.])
             list_vector = [r(dict_shape,theta)*rotation_matrix_normal(theta)@in_plane_vector for theta in list_theta ]
 
         else :
@@ -280,7 +279,7 @@ class DislocationsBuilder :
         """
 
         # We first find the closest atom to the center of the supercell
-        idx_center = np.argmin(np.linalg.norm(self.cubic_supercell.positions - self.cubic_supercell.get_center_of_mass(), axis=1))
+        idx_center = np.argmin(np.linalg.norm(self.cubic_supercell.positions - self.cubic_supercell.get_center_of_mass(), axis=1))      
         self.center = self.cubic_supercell.positions[idx_center]
 
         # Compute hyperplane equation
@@ -304,6 +303,34 @@ class DislocationsBuilder :
         print(f'... I found {Nat_in_plane} atoms in {self.param_dict["orientation_loop"]} plane')
         return 
 
+    def get_cristallographic_vector_in_plane(self) -> np.ndarray : 
+        """Find one cristallographic direction in plane
+        
+        Returns
+        -------
+
+        np.ndarray 
+            Cristallographic direction in plane
+        """
+        in_plane_array = self.cubic_supercell.get_array('in-plane')
+        mask_plane = in_plane_array > 0.0
+        positions_in_plane = self.cubic_supercell.positions[mask_plane]
+
+        idx_center_in_plane = np.argmin(np.linalg.norm(positions_in_plane - self.center, axis=1))
+        #build neighboors of all atoms in plane
+        neighbors_ij, neighbors_shift, _, _ = get_neighborhood(positions_in_plane, 
+                                                               1.5*self.param_dict['a0'],
+                                                               (False, False, False),
+                                                                self.cubic_supercell.cell[:])
+        
+        #find neighboors for central atom
+        mask_atom_center = neighbors_ij[0,:] == idx_center_in_plane
+        r_kcenter = positions_in_plane[ neighbors_ij[1,:][mask_atom_center] ] - positions_in_plane[ neighbors_ij[0,:][mask_atom_center] ] + neighbors_shift[mask_atom_center]
+        composite_id_distance = [(idx, np.linalg.norm(r_k)) for idx, r_k in enumerate(r_kcenter) ]
+        id_cristallo, _ =  sorted(composite_id_distance, key=lambda x: x[1])[0]
+        
+        # get the cristallographic vector
+        return r_kcenter[id_cristallo]/np.linalg.norm(r_kcenter[id_cristallo])
 
     def build_circular_loop(self) -> Atoms :
         """Build circular loop and return ```Atoms``` object containing the whole system 
@@ -443,7 +470,7 @@ class DislocationsBuilder :
         write(path_writing, atoms, format=format)
         return 
     
-    @timeit
+    #@timeit
     def BuildDislocation(self, 
                          writing_path : os.PathLike[str] = '/dislo.geom',
                          format : str = 'vasp',
