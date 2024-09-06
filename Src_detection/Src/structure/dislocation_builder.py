@@ -9,6 +9,15 @@ from ase import Atoms
 from typing import List, Tuple, TypedDict
 
 class InputsDictDislocationBuilder(TypedDict) :
+    """Little class for ```dislocation_builder``` inputs 
+    Possible keys of the dictionnary are : 
+    - ```structure``` : type of cristallographic strucutre (bcc, fcc ...)
+    - ```a0``` : lattice parameter of the system in AA
+    - ```size_loop``` : approximate loop size in AA
+    - ```scale_loop``` : scaling factor to fix the supercell size (```size_loop*scale_loop```) in AA
+    - ```orientation_loop``` : normal vector to the loop plane 
+    - ```element``` : species of the system 
+    """
     structure : str
     a0 : float
     size_loop : float
@@ -17,9 +26,19 @@ class InputsDictDislocationBuilder(TypedDict) :
     element : str
 
 class DislocationsBuilder :
+    """Allows to build interstial dislocation loops working for bcc systems
+    Based on M.C.M work : https://github.com/mcmarinica/Insert_Sias
+
+    Parameters
+    ----------
+
+    inputs_dict : InputsDictDislocationBuilder
+        Dictionnary of parameter to build dislocation loop
+
+    see also : https://github.com/mcmarinica/Insert_Sias"""
     def __init__(self, inputs_dict : InputsDictDislocationBuilder) -> None :
         self.param_dict = inputs_dict
-        self.implemented_lattice = ['BCC', 'FCC']
+        self.implemented_lattice = ['BCC']
         self.possible_plane = self.recursive_unit_vectors()
         self.normal_vector = self.param_dict['orientation_loop']/np.linalg.norm(self.param_dict['orientation_loop'])
         
@@ -135,6 +154,29 @@ class DislocationsBuilder :
 
     def build_polygon_coordinates(self, nb_edge : int = 4, dict_shape : dict = {'kind':'circular',
                                                                                 'r':1.0}) -> Tuple[List[np.ndarray], np.ndarray] : 
+        """Build the coordinates of regular polygon vertices in the dislocation plane coordinates
+        
+        Parameters
+        ----------
+
+        nb_edge : int 
+            Number of polygon edges
+
+        dic_shape : dict 
+            Dictionnary which define the kink of shape for dislocation
+            Example : ```{'nb_edge':4,'kind':'elliptic','a':1.0,'b':2.0}``` or ```{'nb_edge':4,'kind':'circular','r':1.0}```
+        
+        
+        Returns
+        -------
+
+        List[np.ndarray]
+            List of polygon vertices coordinates in the dislocation plane coordinates
+        
+        np.ndarray 
+            Passage matrix between vertices coordinates and cartesian coordinates ```(V_{x_i 1}, ... ,V_{x_i nb_edge})```
+        """
+
 
         def r(dict_shape : dict ,theta : float) -> float : 
             """Build raduis of ellipse depending on theta (from center)
@@ -240,7 +282,14 @@ class DislocationsBuilder :
 
 
     def build_circular_loop(self) -> Atoms :
-        """Build circular loop !"""
+        """Build circular loop and return ```Atoms``` object containing the whole system 
+        
+        Returns
+        -------
+
+        Atoms
+            ```Atoms``` object containing the whole system (dislocation + bulk)
+        """
         positions = self.cubic_supercell.positions
         Natoms = positions.shape[0]
         in_plane = self.cubic_supercell.get_array('in-plane')
@@ -282,8 +331,26 @@ class DislocationsBuilder :
     def build_polygonal_loop(self, nb_edge : int = 4, dict_shape : dict = {'kind':'elliptic',
                                                                                 'a':1.0,
                                                                                 'b':2.0}) -> Atoms : 
+        """Build polygonal loop and return ```Atoms``` object containing the whole system 
+        
+        Parameters
+        ----------
+
+        nb_edge : int 
+            Number of polygon edges
+
+        dic_shape : dict 
+            Dictionnary which define the kink of shape for dislocation
+            Example : ```{'nb_edge':4,'kind':'elliptic','a':1.0,'b':2.0}``` or ```{'nb_edge':4,'kind':'circular','r':1.0}```
+        
+        Returns
+        -------
+
+        Atoms
+            ```Atoms``` object containing the whole system (dislocation + bulk)
+        """
+
         positions = self.cubic_supercell.positions
-        Natoms = positions.shape[0]
         in_plane = self.cubic_supercell.get_array('in-plane')
         
         # build the local basis and vectors for polygon
@@ -320,9 +387,9 @@ class DislocationsBuilder :
             positions_sia_idx = self.build_SIA(positions[idx],
                                                self.burger_norm,
                                                self.normal_vector)
-            xtra = Atoms(2*[self.param_dict['element']],
+            extra = Atoms(2*[self.param_dict['element']],
                                      positions_sia_idx)
-            extra_atoms += xtra
+            extra_atoms += extra
 
         dislocation_system = self.cubic_supercell.copy()
         del dislocation_system[[idx for idx in in_loop_index_array]]
@@ -352,7 +419,26 @@ class DislocationsBuilder :
                          format : str = 'vasp',
                          dic_shape : dict = None,
                          ovito_mode : bool = False) -> None :
+        """Build dislocation from ```InputsDictDislocationBuilder``` dictionnary and 
+        ```dic_shape``` dictionnary 
         
+        Parameters
+        ----------
+
+        writing_path : os.Pathlike[str]
+            Writing path for dislocation geometry file
+
+        format : str 
+            Type geometry file to write (```lammps```, ```vasp``` ...)
+        
+        dic_shape : dict 
+            Dictionnary which define the kink of shape for dislocation if it sets to ```None``` circular loop is build otherwise polygonal loop is built :
+            Example : ```{'nb_edge':4,'kind':'elliptic','a':1.0,'b':2.0}``` or ```{'nb_edge':4,'kind':'circular','r':1.0}```
+        
+        ovito_mode : bool 
+            If bool is True there no geom file written
+        """
+
         self.get_atoms_in_plane()
         if dic_shape is None :
             dislocation = self.build_circular_loop()

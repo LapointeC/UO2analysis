@@ -13,14 +13,24 @@ from typing import List, Dict, Tuple, TypedDict
 
 
 class InputsCompactPhases(TypedDict) :
-    """Little class for ```compact_phases_builder``` inputs """
+    """Little class for ```compact_phases_builder``` inputs 
+    Possible keys of the dictionnary are : 
+    - ```a0``` : lattice parameter of the system in AA
+    - ```element``` : species of the system 
+    - ```scale_factor``` : scaling factor to fix the supercell size (```maximum_index_center*scale_loop```) in AA 
+    """
     a0 : float
     element : str
     scale_factor : float
 
 
 class Dumbells(TypedDict) : 
-    """Little class to build ```Dumbells``` clusters """
+    """Little class to build ```Dumbells``` clusters 
+    Possible keys of the dictionnary are :
+    - ```center``` : coordinates of the dumbell center (in lattice unit coordinates)
+    - ```orientation``` : 3D vectors which links the two atoms of the dumbell (in lattice unit coordinates)
+
+    """
     center : np.ndarray
     orientation : np.ndarray
 
@@ -29,7 +39,11 @@ class Dumbells(TypedDict) :
 ## C15
 ##############
 class C15Center(TypedDict) : 
-    """Little class to build ```C15``` clusters """
+    """Little class to build ```C15``` clusters 
+    Possible keys of the dictionnary are :
+    - ```center``` : coordinates of the perfect ```C15``` center (in lattice unit coordinates)
+    - ```type``` : type of the perfect ```C15``` cluster (```type1``` or ```type2```)
+    """
     center : np.ndarray
     type : str
 
@@ -351,6 +365,9 @@ class C15Builder :
 
         format : str 
             Type geometry file to write (```lammps```, ```vasp``` ...)
+        
+        ovito_mode : bool 
+            If bool is True there no geom file written
         """
         
         #Build C15 system
@@ -364,7 +381,7 @@ class C15Builder :
                             np.ones(len(self.extra_atom),),
                             dtype=float)       
 
-        print(f'... I put {len(self.extra_atom)} A15 atoms in the system')
+        print(f'... I put {len(self.extra_atom)} (C15) atoms in the system')
 
         Natoms_bulk = len(self.cubic_supercell_unit)
         self.cubic_supercell_unit = self.remove_atoms_in_system(self.extra_atom, self.cubic_supercell_unit)
@@ -390,7 +407,11 @@ class C15Builder :
 ## A15
 ##############
 class A15Center(TypedDict) : 
-    """Little class to build ```A15``` clusters """
+    """Little class to build ```A15``` clusters 
+    Possible keys of the dictionnary are :
+    - ```center``` : coordinates of the perfect ```A15``` center (in lattice unit coordinates)
+    - ```type``` : type of the perfect ```A15``` cluster (```type1``` or ```type2```)
+    """
     center : np.ndarray
     type : str
 
@@ -663,6 +684,9 @@ class A15Builder :
 
         format : str 
             Type geometry file to write (```lammps```, ```vasp``` ...)
+        
+        ovito_mode : bool 
+            If bool is True there no geom file written
         """
         
         #Build A15 system
