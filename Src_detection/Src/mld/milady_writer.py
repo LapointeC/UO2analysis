@@ -222,6 +222,13 @@ def read_milady_descriptor(filename : str,
     elif ext == 'npz' : 
         return np.load(filename)
     
+    elif ext == 'fml' : 
+        def skiper(val) :
+            return 0.0
+        
+        draft_data = np.loadtxt('{:}.fml'.format(filename), converters={0:skiper})[:,1:]
+        return draft_data.reshape((draft_data.shape[0],draft_data.shape[1]//3,3))
+
 def fill_milady_descriptor(atoms : Atoms, 
                            file_descriptors : str, 
                            name_property : str = 'milady-descriptors',

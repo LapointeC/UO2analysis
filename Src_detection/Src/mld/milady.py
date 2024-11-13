@@ -911,6 +911,21 @@ class Descriptor :
         """
         raise MiladySetupError('Not yet implemented...')
 
+    @classmethod
+    def Kernel2Body(cls, r_cut : float = DEFAULTS["r_cut"],
+                    sigma_2b : float = 0.3,
+                    delta_2b : float = 0.1,
+                    np_radial_2b : int = 50) : 
+        param = {}
+        param['descriptor_type'] = None
+        param['activate_k2b'] = True
+        param['sigma_2b'] = sigma_2b
+        param['delta_2b'] = delta_2b
+        param['np_radial_2b'] = np_radial_2b
+
+        return cls(param, np_radial_2b)
+
+
     def dimensionality(self) :
         if self.dimension is not None :  
             print('Descriptor dimensionality is %3d'%(self.dimension))
@@ -949,13 +964,19 @@ def DescriptorsHybridation(descriptor1 : Descriptor, descriptor2 : Descriptor) -
         if mixed_type not in implemented_mixed_type : 
             raise MiladySetupError('This hybridation is not yet implemented...')
 
-    check_hybridation(descriptor1.param['desc_type'],descriptor2.param['desc_type'])
+    if descriptor1.param['descriptor_type'] is None : 
+        new_type = descriptor2.param['descriptor_type']
+    elif descriptor2.param['descriptor_type'] is None : 
+        new_type = descriptor1.param['descriptor_type']
+    else :
+        new_type = change_desc_type(descriptor1.param['descriptor_type'],descriptor2.param['descriptor_type'])
+        check_hybridation(new_type)
 
     param_descriptor2 = descriptor2.param
     for key_descriptor in param_descriptor2 : 
         if key_descriptor not in descriptor1.param : 
             descriptor1.param[key_descriptor] = param_descriptor2[key_descriptor]
-    descriptor1.param['desc_type'] = change_desc_type(descriptor1.param['desc_type'],descriptor2.param['desc_type'])
+    descriptor1.param['descriptor_type'] = new_type
     
     if descriptor1.dimension is not None and descriptor2.dimension is not None : 
         descriptor1.dimension += descriptor2.dimension
@@ -996,7 +1017,7 @@ class DBManager :
         if model_ini_dict is None : 
             if isinstance(atoms, list) :
                 if already_set :
-                    self.model_init_dic : Dict[str,DBtype] = {'00_000_%s'%(str(1000000+i)[1:]) : {'atoms':atoms[i],'energy':atoms[i].get_array('energy'),'forces':atoms[i].get_array('forces'),'stress':atoms[i].get_array('stress')} for i in range(len(atoms)) }
+                    self.model_init_dic : Dict[str,DBtype] = {'00_000_%s'%(str(1000000+i)[1:]) : {'atoms':atoms[i],'energy':None,'forces':atoms[i].get_array('forces'),'stress':None} for i in range(len(atoms)) }
                 else :   
                     self.model_init_dic : Dict[str,DBtype] = {'00_000_%s'%(str(1000000+i)[1:]) : {'atoms':atoms[i],'energy':None,'forces':None,'stress':None} for i in range(len(atoms)) }
             else : 
@@ -1440,10 +1461,13 @@ class Milady(Calculator):  # type: ignore
                                     shell=True,
                                     stdout=out,
                                     cwd=directory)
+        
         return errorcode
     
     def read_results(self, properties : List[str], dbmodel : DBManager) :
-        implemented_local_properties = ['milady-descriptors']
+        implemented_local_properties = ['milady-descriptors','milady-descriptors-forces']
+        dic_equiv_properties = {'milady-descriptors':'eml',
+                                'milady-descriptors-forces':'fml'}
         if dbmodel is not None : 
             for property in properties : 
                 if property not in implemented_local_properties : 
@@ -1451,11 +1475,12 @@ class Milady(Calculator):  # type: ignore
                     continue
                 else : 
                     for key in dbmodel.model_init_dic.keys() : 
-                        if property == 'milady-descriptors' : 
+                        if property in implemented_local_properties : 
                             dbmodel.model_init_dic[key]['atoms'] = fill_milady_descriptor(dbmodel.model_init_dic[key]['atoms'],
                                                                        '{:}/descDB/{:}'.format(self.directory,key),
-                                                                       name_property=property)
-                        elif properties == 'milady-descriptors-forces' :
+                                                                       name_property=property,
+                                                                       ext=dic_equiv_properties[property])
+                        else :
                             raise calculator.CalculatorSetupError("This property is not yet implemented")
                     
                 

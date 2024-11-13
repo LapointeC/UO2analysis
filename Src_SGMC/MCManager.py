@@ -203,7 +203,8 @@ class MCManager(BaseManager):
             dic_mu = self.build_mu_dict(self.parameters.parameters['MuGrid'])
             if self.parameters.parameters["Restart"] : 
                 dic_mu = self.manage_restart(self.Worker, dic_mu=dic_mu)
-            
+                _, array_species = self.get_number_of_atoms_each_species()
+
             if self.rank == 0 : 
                 print('delta mu | <c0> | <c1> | <c^2> - <c>^2') 
                 self.log('delta mu | <c0> | <c1> | <c^2> - <c>^2')
@@ -248,6 +249,7 @@ class MCManager(BaseManager):
             
             if self.parameters.parameters["Restart"] : 
                 dic_mu = self.manage_restart(self.Worker, dic_mu=dic_mu)
+                _, array_species = self.get_number_of_atoms_each_species()
             
             if self.rank == 0 : 
                 array_txt = [ f' <c{i}> |' for i in range(len(array_concentration)) ] + [' max( <c^2> - <c>^2 )']
