@@ -2,6 +2,7 @@ import numpy as np
 
 from ase import Atoms
 from typing import List, Dict
+from warnings import warn
 
 import matplotlib.pyplot as plt
 from matplotlib import colors
@@ -16,7 +17,7 @@ from ovito.data import DataCollection
 ########################################################
 class FrameOvito(PipelineSourceInterface) : 
     """Define the PipelineSourceInterface given to ovito pipeline to 
-    plot frame by frame the confiugrations"""
+    plot frame by frame the configurations"""
     def __init__(self, list_atoms : List[Atoms]) :
         self.list_atoms = list_atoms
         self.lenght = len(list_atoms)
@@ -35,7 +36,7 @@ class NaiveOvitoModifier :
     """Naive ```OvitoModifier``` for debug ..."""
     def __init__(self, dict_transparency : Dict[float, List[int]] = None, 
                  dict_color : Dict[str, List[int]] = None, 
-                 array_line : np.ndarray = None) -> None : 
+                 array_line : List[np.ndarray] = None) -> None : 
         """Init method for ```NaiveOvitoModifier``` which just assign colors and transparency depending on ids given in dictionnaries ...
         
         Parameters
@@ -52,11 +53,34 @@ class NaiveOvitoModifier :
             
         """
         if dict_transparency is None or dict_color is None : 
-            raise TimeoutError('Some dictionnaries are set to None ...')
+            warn('Some dictionnaries are set to None ...')
 
         self.dict_transparency = dict_transparency
         self.dict_color = dict_color
         self.array_line = array_line
+
+    def ASEArrayModifier(self, dict_transparency : Dict[float, float],
+                               dict_color : Dict[float, str],
+                               name_array : str) -> None : 
+        """Variant of dictionnary based on ```ase``` array
+        
+        Parameters
+        ----------
+
+        dict_transparency : Dict[float, float]
+            Transparency dictionnary, key are value is ```ase``` array
+
+        dict_color : Dict[float, str]
+            Color dictionnary, key are value is ```ase``` array
+
+        name_array : str
+            Name of array in ```ase``` object
+
+        """
+        self.dict_transparency_ase = dict_transparency
+        self.dict_color_ase = dict_color 
+        self.ase_array = name_array
+        return 
 
     def BuildArrays(self, frame : int , data : DataCollection) -> None :
         """Build the whole ```NaiveOvitoModifier```
@@ -106,9 +130,36 @@ class NaiveOvitoModifier :
         data.particles_.create_property('Transparency',data=self.array_transparency)
         
         if self.array_line is not None : 
-            lines = data.lines.create(identifier='myline', positions=self.array_line)
-            lines.vis.color = colors.to_rgb('chartreuse')
-            lines.vis.width = 0.5
+            Cmap = plt.get_cmap('autumn')
+            colors_line = [Cmap(i) for i in np.linspace(0.0,1.0,num=len(self.array_line)) ]
+            for id,line in enumerate(self.array_line) :
+                lines = data.lines.create(identifier=f'myline{id}', positions=line)
+                lines.vis.color = tuple( [ c for c in colors_line[id]][:-1] ) #colors.to_rgb('chartreuse')
+                lines.vis.width = 0.5
+
+
+    def BuildArraysAse(self, frame : int , data : DataCollection) -> None :
+        """Build the whole ```NaiveOvitoModifier```
+        
+        frame : int 
+            index of frame (needed by ```Ovito```)
+
+        data : DataCollection 
+            System to visualise 
+        """
+
+        array_ase = data.particles[self.ase_array][:]
+        array_transparency = np.empty(array_ase.shape)
+        array_color = np.empty((len(array_ase),3))
+
+        for id_data_ase, data_ase in enumerate(array_ase) : 
+            array_transparency[id_data_ase] = self.dict_transparency_ase[data_ase]
+            array_color[id_data_ase] = colors.to_rgb(self.dict_color_ase[data_ase])
+
+
+        data.particles_.create_property('Color',data=array_color)
+        data.particles_.create_property('Transparency',data=array_transparency)
+        
 
 class MCDModifier :
     """```OvitoModifier``` function for visual MCD selection"""

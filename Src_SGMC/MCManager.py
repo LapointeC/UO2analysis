@@ -97,6 +97,7 @@ class MCManager(BaseManager):
             restart_file = max([ f"{self.parameters.parameters['WritingDirectory']}/{f}" for f in os.listdir(self.parameters.parameters['WritingDirectory']) ],
                                key = os.path.getatime)
             self.parameters.Configuration = restart_file
+            lammps_worker.run_commands("clear")
             lammps_worker.run_script("Input")
             
             return None                    

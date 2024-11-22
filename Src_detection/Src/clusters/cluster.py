@@ -149,7 +149,7 @@ class LocalLine :
         self.local_burger = None
         self.local_normal = None
         self.next = None
-        self.norm_normal = None
+        self.norm_normal = np.nan
 
     def update_center(self, center : np.ndarray) -> None : 
         """Update the center of ```LocalLine``` 

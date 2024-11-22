@@ -66,8 +66,9 @@ class DislocationObject :
         self.rcut = rcut
         self.structure = structure
         self.convex_hull = self.get_convex_hull()
-        
-        self.dislocations : Dict[str,ClusterDislo] = {}
+        #self.OrganizeSystem()
+
+        self.dislocations : Dict[int,ClusterDislo] = {}
         self.starting_point_line = None
 
         # reference cristallographic neighbours vector (unit coordinate) for traditionnal lattices 
@@ -84,6 +85,15 @@ class DislocationObject :
                                   [ 0.28867513,  0.5 , -0.815 ], [ 0.28867513, -0.5 , -0.815 ], [-0.8660254,  0.5 , 0.0] , [-0.8660254, -0.5 ,  0.0], [ 0., -1.,  0.0],
                                   [0.8660254, 0.5 , 0.0], [ 0.8660254, -0.5 ,  0.0], [-0.57735027, 1.0 ,  0.815 ], [-0.57735027,  1.0 , -0.815 ], [ 1.15470054, 0.0 , -0.815 ], 
                                   [1.15470054, 0.0, 0.815]  ])
+
+    def OrganizeSystem(self) -> None : 
+        """Build the starting point local dislocation line for each ```ClusterDislo```. 
+        Starting point of each cluster is chosen to be the farest of the center of the cluster"""
+        barycenter = np.mean(self.system.positions, axis =0)
+        composite_id_distance = [(idx, np.linalg.norm(pos - barycenter)) for idx,pos in enumerate(self.system.positions) ]
+        sorting =  sorted(composite_id_distance, key=lambda x: x[1], reverse=True)
+        self.system : Atoms = self.system[ [s[0] for s in sorting ] ]
+        return  
 
     def get_convex_hull(self) -> ConvexHull :
         """Build the 3D convex hull for the whole system 
@@ -128,6 +138,8 @@ class DislocationObject :
         idx_dislo = 0
         barycenter = np.mean(self.system.positions, axis=0)
         starting_id = np.argmax( np.linalg.norm(self.system.positions - barycenter, axis=1)  )
+        
+        
         self.starting_point_line = starting_id
         self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[starting_id].position, self.system[starting_id].symbol ), starting_id, rcut_cluster)  
 
@@ -146,9 +158,10 @@ class DislocationObject :
                 #at_i have to be sufficiently far from the cluster to build an accurate dislocation line 
                 if min_dist_array[index_min_key] > rcut_line :
                     tmp_list.append(id_atom_i)
-                    if closest_cluster.get_elliptic_distance(at_i) > scale_cluster*closest_cluster.size :
+                    if closest_cluster.get_elliptic_distance(at_i) > scale_cluster :
                             idx_dislo += 1 
-                            self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[idx_dislo].position, at_i.symbol ), idx_dislo, rcut_cluster)                        
+                            self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( at_i.position, at_i.symbol ), idx_dislo, rcut_cluster)                        
+                    
                     #otherwise we aggregate at_i to the closest ClusterDislo
                     else : 
                         closest_cluster.append_dislo(LocalLine(at_i.position, at_i.symbol), id_atom_i)
@@ -157,7 +170,95 @@ class DislocationObject :
                     continue 
         
         return tmp_list
-    
+
+    def AggregateTwoClusterDislo(self, slave_cluster : ClusterDislo, master_cluster : ClusterDislo) -> ClusterDislo :
+        """Aggregate two ```ClusterDislo``` in one 
+        
+        Parameters
+        ----------
+
+        slave_cluster : ```ClusterDislo```     
+            ```ClusterDislo``` to delete
+
+        master_cluster : ```ClusterDislo```
+            Aggregation ```ClusterDislo```
+
+        Returns
+        -------
+
+        ```ClusterDislo```
+            Master ```ClusterDislo``` after aggregation
+
+        """
+        for id_s, l_s in slave_cluster.local_lines.items() :
+            master_cluster.append_dislo(l_s, id_s)
+        return master_cluster
+
+    def RefineSamplingLine(self, scale : float = 2.0) -> None : 
+        """Aggregate the closest ```ClusterDislo``` before build the ordering line
+        
+        Parameters
+        ----------
+
+        scale : float
+            Scaling factor to consider if two ```ClusterDislo``` are overlaped
+
+        """
+        
+        dic_aggre : Dict[int, List[int]] = {}
+        for id_i, cluster_i in self.dislocations.items() : 
+            for id_j, cluster_j in self.dislocations.items() : 
+                if id_i > id_j :
+                    r_ij = np.linalg.norm(cluster_i.center - cluster_j.center)
+                    size_ij = cluster_i.size + cluster_j.size
+                    
+                    # Aggregation between the two clusters !
+                    if r_ij < scale*size_ij :
+                        if id_i in dic_aggre.keys() : 
+                            if id_j not in dic_aggre[id_i] :
+                                dic_aggre[id_i].append(id_j)
+                        elif id_j in dic_aggre.keys() : 
+                            if id_i not in dic_aggre[id_j] :
+                                dic_aggre[id_j].append(id_i)
+
+                        else :
+                            
+                            # check if we have to add a new key
+                            bool_check = True
+                            for _, val in dic_aggre.items() : 
+                                if (id_j in val) and (id_i not in val) : 
+                                    val.append(id_i)
+                                    bool_check = False 
+                                    break
+                                elif (id_i in val) and (id_j not in val) :
+                                    val.append(id_j)
+                                    bool_check = False
+                                    break
+
+                            if bool_check :
+                                dic_aggre[id_i] = [id_j]
+                
+                else :
+                    continue
+        
+        #print(dic_aggre)
+        # reaggreate ...
+        for key_id, list_to_aggr in dic_aggre.items() : 
+            for id_to_aggr in list_to_aggr : 
+                try : 
+                    cluster_master = self.dislocations[key_id]
+                    cluster_slave = self.dislocations[id_to_aggr]
+
+                    # aggregate on master
+                    self.AggregateTwoClusterDislo(cluster_slave, cluster_master)
+
+                    # del old key
+                    del self.dislocations[id_to_aggr]
+                except : 
+                    warnings.warn(f'Something went wrong for {key_id} (master) / {id_to_aggr} (slave) aggregation')
+
+        return 
+
     def StartingPointCluster(self) -> None :
         """Build the starting point local dislocation line for each ```ClusterDislo```. 
         Starting point of each cluster is chosen to be the farest of the center of the cluster"""
@@ -170,7 +271,7 @@ class DislocationObject :
 
     def BuildOrderingLine(self, neighbour : np.ndarray, 
                           descriptor : np.ndarray = None, 
-                          idx_neighbor : np.ndarray = None) -> Atoms :
+                          idx_neighbor : np.ndarray = None) -> List[Atoms] :
         """This method allows to order the ```LocalLine``` by explicitely construct the dislocation line. 
         The dislocation line is so computed at each  ```LocalLine``` object. If descriptor are not None, they are used 
         to compute realistic barycenter for the dislocation : 
@@ -197,8 +298,9 @@ class DislocationObject :
             Coordinate of the whole point part of the line (used for debug)
         """
         
-        barycenter = Atoms()
+        barycenter = []
         for _, cluster in self.dislocations.items():
+            barycenter_loc = Atoms()
             weights = np.ones(neighbour.shape[1])
             if descriptor is not None :
                 subset_descriptor = descriptor[idx_neighbor[self.starting_point_line] , :]
@@ -207,16 +309,22 @@ class DislocationObject :
             starting_point = np.average( neighbour[cluster.starting_point,:,:] + cluster.local_lines[cluster.starting_point].center, axis=0, weights=weights)
             
             #debug 
-            barycenter.append(Atom('W',starting_point))
+            barycenter_loc.append(Atom('W',starting_point))
 
             # updating data in local lines for the starting point!
             cluster.local_lines[cluster.starting_point].update_center(starting_point)
             explored_idx = [cluster.starting_point]
             cluster.order_line = [cluster.starting_point]
 
+            #starting_point_idx = cluster.starting_point
+
             for _ in range(len(cluster.local_lines) - 1 ) : 
                 #build the sub_local_line dictionnary which excluded the previously explored points
                 sub_local_line = {key:val for key, val in cluster.local_lines.items() if key not in explored_idx}
+                
+                #composite_id_distance = [(idx, np.amin(np.linalg.norm(line.center - starting_point - neighbour[starting_point_idx,:,:], axis=1))) for idx, line in sub_local_line.items() 
+                #                         if np.linalg.norm(line.center - starting_point) > 0.0 ]                
+
                 composite_id_distance = [(idx, np.linalg.norm(line.center - starting_point)) for idx, line in sub_local_line.items() if np.linalg.norm(line.center - starting_point) > 0.0 ]
                 min_id, _ =  sorted(composite_id_distance, key=lambda x: x[1])[0]
 
@@ -229,9 +337,10 @@ class DislocationObject :
                 cluster.order_line.append(min_id)
                 # build the new starting point for the iterative skim...
                 new_starting_point = np.average( neighbour[min_id,:,:] + cluster.local_lines[min_id].center, axis=0, weights=weights)
-                
+                new_starting_point_idx = min_id
+
                 #debug
-                barycenter.append(Atom('W',new_starting_point))
+                barycenter_loc.append(Atom('W',new_starting_point))
 
                 #updating the local normal from the previous starting point and next id 
                 cluster.local_lines[explored_idx[-1]].update_normal( (new_starting_point - starting_point)/np.linalg.norm(new_starting_point - starting_point) )
@@ -240,10 +349,15 @@ class DislocationObject :
                 
                 #updating the new starting point ! 
                 starting_point = new_starting_point
+                
+                #starting_point_idx = new_starting_point_idx
+            
+            barycenter.append(barycenter_loc)
 
-            return barycenter
+        return barycenter
 
-    def LineSmoothing(self, nb_averaging_window : int = 2) -> Atoms : 
+
+    def LineSmoothing(self, nb_averaging_window : int = 2) -> List[Atoms] : 
         """Allows to smooth the dislocation line based on BuildOrderingLine method. 
         The previous dislocation line is smoothed by averaging window (in cartesian space) with other point which are part of the previous line
         This method create a new ```ClusterDislo``` attribute called ```smooth_local_lines``` which have the same structure than ```local_lines```
@@ -262,9 +376,12 @@ class DislocationObject :
             Coordinate of the whole point part of the smooth line (used for debug)
         """
         
-        barycenter = Atoms()
+        barycenter = []
         for _, cluster in self.dislocations.items():
             
+            # debug
+            barycenter_loc = Atoms()
+
             #build the smoothed local line !INDEXES ARE CHANGED AT THIS POINT!
             for k in range(len(cluster.order_line) - nb_averaging_window) : 
                 species = cluster.local_lines[cluster.order_line[k]].species
@@ -272,7 +389,7 @@ class DislocationObject :
                 av_localline_obj = LocalLine( np.mean(all_window_positions, axis=0), species)
                 
                 #debug
-                barycenter.append(Atom( symbol=species, position= np.mean(all_window_positions, axis=0)))
+                barycenter_loc.append(Atom( symbol=species, position= np.mean(all_window_positions, axis=0)))
                 #smooth line is updated
                 cluster.smooth_local_lines[k] = av_localline_obj
                 cluster.smooth_order_line.append( cluster.order_line[int(0.5*(2*k+nb_averaging_window))] )
@@ -290,6 +407,8 @@ class DislocationObject :
             cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_normal( previous_normal )
             cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_norm_normal( previous_norm )
             cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_next(None)
+
+            barycenter.append(barycenter_loc)
 
         return barycenter
             
@@ -354,15 +473,17 @@ class DislocationObject :
             for id_line in cluster.smooth_local_lines.keys() : 
                 center_line = cluster.smooth_local_lines[id_line].center
                 id_at2keep = [id for id, atom in enumerate(self.system) if np.linalg.norm(atom.position - center_line) < rcut_burger ]
-                if len(id_at2keep) == 0 : 
-                    raise ValueError(f'Number of atom in rcut for id line {id_line} is zero !')
+                
+                if len(id_at2keep) < 4 : 
+                    raise ValueError(f'''Number of atom in rcut for id line {id_line} < 5 ({len(id_at2keep)}) 
+                                       rcut_bruger has to be increased !''')
 
                 weights = np.ones(len(id_at2keep))
                 if descriptor is not None :
                     subset_descriptor = descriptor[id_at2keep , :]
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])   
 
-                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0 )
+                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0)
                 sub_convex_hull = ConvexHull(self.system.positions[id_at2keep])
 
                 burger_vector_line = nye_tensor_id_line@cluster.smooth_local_lines[id_line].local_normal*sub_convex_hull.volume
@@ -547,6 +668,7 @@ class DislocationObject :
         Nye_tensor, _, _, array_neighbour_ext, index_neighbour_ext = self.NyeTensor()
         self.BuildSamplingLine(rcut_line=rcut_line, rcut_cluster=rcut_cluster, scale_cluster=scale_cluster)
         self.StartingPointCluster()
+        self.RefineSamplingLine(scale=scale_cluster)
         self.BuildOrderingLine(array_neighbour_ext, descriptor=descritpor, idx_neighbor=index_neighbour_ext)
         if smoothing_line is not None : 
             self.LineSmoothing(nb_averaging_window=smoothing_line['nb_averaging_window'])
