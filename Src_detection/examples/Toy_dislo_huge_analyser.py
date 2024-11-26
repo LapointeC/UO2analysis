@@ -142,13 +142,14 @@ class ToyDislocationAnalyser :
         print('... Starting Nye tensor computation ...')
         nye, array_neigh, index_neigh, array_neigh_ext, index_neigh_ext = self.dislocation_object.NyeTensor()
         print('... Starting building of sampling line ...')
-        idx_list = self.dislocation_object.BuildSamplingLine(rcut_line=rcut_line, rcut_cluster=rcut_cluster, scale_cluster=scale_cluster)
+        idx_list = self.dislocation_object.BuildSamplingLine(rcut_line=rcut_line, rcut_cluster=rcut_cluster, scale_cluster=scale_cluster) 
         self.dislocation_object.RefineSamplingLine(scale=scale_cluster)
         self.dislocation_object.StartingPointCluster()
         print('... Starting ordering line ...')
-        _ = self.dislocation_object.BuildOrderingLine(array_neigh_ext,descriptor=None,idx_neighbor=index_neigh_ext)
+        _ = self.dislocation_object.BuildOrderingLine(array_neigh_ext,scale_cluster,descriptor=None,idx_neighbor=index_neigh_ext)
         tmp_atoms = self.dislocation_object.LineSmoothing(nb_averaging_window=nb_averaging_window)
-        #self.dislocation_object.ComputeBurgerOnLineSmooth(rcut_burger, nye, descriptor=None)
+        self.dislocation_object.ComputeBurgerOnLineSmooth(rcut_burger, nye, descriptor=None)
+        
         return idx_list, tmp_atoms
 
 path_dislo = '/home/lapointe/DisloEmmanuel/small_tests/CONTCAR_p3p00GPa.lmp.gz'
@@ -164,7 +165,7 @@ print('... Starting analysis ...')
 sample_id, line_atoms = dislocation_finder.perform_dislocation_analysis(3.1882*np.eye(3),
                                                                         rcut_dislo=4.5,
                                                                         rcut_line=4.5,
-                                                                        rcut_cluster=5.5,
+                                                                        rcut_cluster=6.0,
                                                                         scale_cluster=2.5,
                                                                         nb_averaging_window=4,
                                                                         rcut_burger=5.0)

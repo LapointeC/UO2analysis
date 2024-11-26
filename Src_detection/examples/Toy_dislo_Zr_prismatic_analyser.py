@@ -9,7 +9,7 @@ from ase import Atoms, Atom
 sys.path.insert(0,'../')
 from Src import DislocationObject, DfctAnalysisObject, \
                   FrameOvito, NaiveOvitoModifier, \
-                  timeit
+                  timeit, get_N_neighbour
 
 from ovito.io.ase import ase_to_ovito
 from ovito.pipeline import Pipeline, PythonSource, StaticSource
@@ -73,7 +73,6 @@ class ToyDislocationAnalyser :
         mask_volume = volume_bar < mean_volume + nb_std*std_volume
         return id_atoms_bar[mask_volume]
 
-
     @timeit
     def build_extended_neigh(self, list_idx: List[int], rcut_extended: float = 4.5, rcut_full: float = 7.0) -> Tuple[np.ndarray, np.ndarray]:
         if rcut_extended > rcut_full:
@@ -122,7 +121,7 @@ class ToyDislocationAnalyser :
         idx_list = self.dislocation_object.BuildSamplingLine(rcut_line=rcut_line, rcut_cluster=rcut_cluster, scale_cluster=scale_cluster)
         self.dislocation_object.RefineSamplingLine(scale=scale_cluster)
         self.dislocation_object.StartingPointCluster()
-        _ = self.dislocation_object.BuildOrderingLine(array_neigh_ext,descriptor=None,idx_neighbor=index_neigh_ext)
+        _ = self.dislocation_object.BuildOrderingLine(array_neigh_ext,scale_cluster,descriptor=None,idx_neighbor=index_neigh_ext)
         tmp_atoms = self.dislocation_object.LineSmoothing(nb_averaging_window=nb_averaging_window)
         self.dislocation_object.ComputeBurgerOnLineSmooth(rcut_burger, nye, descriptor=None)
         
@@ -132,6 +131,7 @@ class ToyDislocationAnalyser :
 ### INPUTS
 ##############################
 path_dislo = '/home/lapointe/DisloEmmanuel/small_tests/zr_loop.79_n6_I1.cfg'
+#path_dislo = '/home/lapointe/DisloEmmanuel/small_tests/zr_loop.305_n6_BB.cfg'
 cell = 3.234*np.array([[1.0, 0.0, 0.0],
                        [-0.5, 0.8660254037844386468, 0.0],
                        [0.0, 0.0, 1.598021026592455164]])
@@ -139,17 +139,17 @@ cell = 3.234*np.array([[1.0, 0.0, 0.0],
 
 
 dislocation_finder = ToyDislocationAnalyser(path_dislo, data_type='cfg')
-dislocation_finder.extend_dislocation((2,1,1))
+dislocation_finder.extend_dislocation((1,1,1))
 outliers_idx = dislocation_finder.get_outliers(nb_std=1.0,
                                 rcut=3.5)
 extended_outlier, full_outlier = dislocation_finder.build_extended_neigh(outliers_idx, rcut_extended=6.5, rcut_full=8.0)
 sample_id, line_atoms = dislocation_finder.perform_dislocation_analysis(cell,
                                                                         rcut_dislo=6.0,
-                                                                        rcut_line=4.0,
+                                                                        rcut_line=3.5,
                                                                         rcut_cluster=5.5,
                                                                         scale_cluster=3.0,
                                                                         nb_averaging_window=2,
-                                                                        rcut_burger=6.5)
+                                                                        rcut_burger=7.5)
 
 print(line_atoms)
 frame_object = FrameOvito([dislocation_finder.dislocation])

@@ -1,5 +1,7 @@
 import os
-from typing import List
+import numpy as np
+
+from typing import List, Dict
 from difflib import SequenceMatcher
 
 def BuildingFunction(path_dir : str) -> List[str] :
@@ -103,3 +105,47 @@ def nearest_mode(list_mode,mode,nb_poss):
                 list_mode[id_1], list_mode[id_2] = list_mode[id_2], list_mode[id_1]
 
     return list_mode[:nb_poss]
+
+def merge_dict_(dict : Dict[int,List[int]]) -> Dict[int,List[int]] :
+    """Merge aggregation dictionnary for ```DislocationObject```
+    
+    Parameters
+    ----------
+
+    dict : Dict[int,List[int]]
+        Dictionnary of aggregation containing redundant informations
+
+    Returns
+    -------
+
+    Dict[int,List[int]]
+        New aggreation dictionnary with redundancy 
+    
+    """
+    key2del = []
+    
+    dict_m = dict.copy()
+    for key1, val1 in dict_m.items() : 
+        for key2, val2 in dict_m.items() : 
+            if key1 < key2 and key1 not in key2del : 
+                if key1 in val2 : 
+                    key2del.append(key1)
+                    val2 += val1
+
+                else : 
+                    for v in val1 : 
+                        if v in val2 : 
+                            key2del.append(key1)
+                            val2 += val1 
+                            break 
+
+            else :
+                continue
+    for k2d in key2del : 
+        del dict_m[k2d]
+
+    for key in dict_m.keys() : 
+        u_list = np.unique(dict_m[key]).tolist()
+        dict_m[key] = u_list
+
+    return dict_m

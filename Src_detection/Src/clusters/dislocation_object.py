@@ -6,7 +6,7 @@ from .cluster import ClusterDislo, LocalLine
 
 import numpy as np
 from scipy.spatial import ConvexHull
-from ..tools import get_N_neighbour, get_N_neighbour_huge
+from ..tools import get_N_neighbour, get_N_neighbour_huge, merge_dict_
 
 class reference_structure(TypedDict) :
     """TypedDict class used to compute the Nye tensor"""
@@ -214,7 +214,9 @@ class DislocationObject :
         """
         
         dic_aggre : Dict[int, List[int]] = {}
-        for id_i, cluster_i in self.dislocations.items() : 
+        for id_i, cluster_i in self.dislocations.items() :
+            #print()
+            #print('loop i',id_i,dic_aggre) 
             for id_j, cluster_j in self.dislocations.items() : 
                 if id_i > id_j :
                     r_ij = np.linalg.norm(cluster_i.center - cluster_j.center)
@@ -224,35 +226,52 @@ class DislocationObject :
                     # Aggregation between the two clusters !
                     #if r_ijsquare < (scale*size_ij)**2 :
                     if r_ij < scale*size_ij :
-                        if id_i in dic_aggre.keys() : 
+                        if id_i in dic_aggre.keys() :
                             if id_j not in dic_aggre[id_i] :
+                                #print(f'Here id_i {id_i} append {id_j}') 
                                 dic_aggre[id_i].append(id_j)
-                        elif id_j in dic_aggre.keys() : 
+                        
+                        elif id_j in dic_aggre.keys() :
                             if id_i not in dic_aggre[id_j] :
+                                #print(f'Here id_j {id_j} append {id_i}') 
                                 dic_aggre[id_j].append(id_i)
 
                         else :
                             
+                            #print('Will add new key')
+                            #print(id_i, id_j)
                             # check if we have to add a new key
                             bool_check = True
                             for _, val in dic_aggre.items() : 
                                 if (id_j in val) and (id_i not in val) : 
+                                    #print(val, id_i, 'i')
                                     val.append(id_i)
                                     bool_check = False 
                                     break
                                 elif (id_i in val) and (id_j not in val) :
+                                    #print(val, id_j, 'j')
                                     val.append(id_j)
+                                    bool_check = False
+                                    break
+                                
+                                elif (id_i in val) and (id_j in val) : 
                                     bool_check = False
                                     break
 
                             if bool_check :
+                                #print(f'New key : {id_i} => {id_j}')
                                 dic_aggre[id_i] = [id_j]
                 
                 else :
                     continue
         
         #print(dic_aggre)
+
         # reaggreate ...
+        dic_aggre = merge_dict_(dic_aggre)
+        #print(dic_aggre)
+        #whole2delete = []
+
         for key_id, list_to_aggr in dic_aggre.items() : 
             for id_to_aggr in list_to_aggr : 
                 try : 
@@ -262,10 +281,11 @@ class DislocationObject :
                     # aggregate on master
                     self.AggregateTwoClusterDislo(cluster_slave, cluster_master)
 
-                    # del old key
+                    # del key
                     del self.dislocations[id_to_aggr]
                 except : 
                     warnings.warn(f'Something went wrong for {key_id} (master) / {id_to_aggr} (slave) aggregation')
+
 
         return 
 
@@ -281,6 +301,7 @@ class DislocationObject :
 
 
     def BuildOrderingLine(self, neighbour : np.ndarray, 
+                          scale : float,
                           descriptor : np.ndarray = None, 
                           idx_neighbor : np.ndarray = None) -> List[Atoms] :
         """This method allows to order the ```LocalLine``` by explicitely construct the dislocation line. 
@@ -327,15 +348,12 @@ class DislocationObject :
             explored_idx = [cluster.starting_point]
             cluster.order_line = [cluster.starting_point]
 
-            #starting_point_idx = cluster.starting_point
-
+            key2del = []
+            bool_stop = False
             for _ in range(len(cluster.local_lines) - 1 ) : 
                 #build the sub_local_line dictionnary which excluded the previously explored points
                 sub_local_line = {key:val for key, val in cluster.local_lines.items() if key not in explored_idx}
                 
-                #composite_id_distance = [(idx, np.amin(np.linalg.norm(line.center - starting_point - neighbour[starting_point_idx,:,:], axis=1))) for idx, line in sub_local_line.items() 
-                #                         if np.linalg.norm(line.center - starting_point) > 0.0 ]                
-
                 composite_id_distance = [(idx, np.linalg.norm(line.center - starting_point)) for idx, line in sub_local_line.items() if np.linalg.norm(line.center - starting_point) > 0.0 ]
                 min_id, _ =  sorted(composite_id_distance, key=lambda x: x[1])[0]
 
@@ -346,23 +364,32 @@ class DislocationObject :
                 #find the next previous point of the local line
                 explored_idx.append(min_id)
                 cluster.order_line.append(min_id)
+                
                 # build the new starting point for the iterative skim...
                 new_starting_point = np.average( neighbour[min_id,:,:] + cluster.local_lines[min_id].center, axis=0, weights=weights)
-                new_starting_point_idx = min_id
 
-                #debug
-                barycenter_loc.append(Atom('W',new_starting_point))
+                #debug and check ordering
+                if (np.linalg.norm(new_starting_point - starting_point) > scale*cluster.size) and (not bool_stop) :
+                    barycenter_loc.append(Atom('W',new_starting_point))
+                    bool_stop = True
 
                 #updating the local normal from the previous starting point and next id 
                 cluster.local_lines[explored_idx[-1]].update_normal( (new_starting_point - starting_point)/np.linalg.norm(new_starting_point - starting_point) )
                 cluster.local_lines[explored_idx[-1]].update_norm_normal( np.linalg.norm(new_starting_point - starting_point) )
                 cluster.local_lines[explored_idx[-1]].update_next( min_id )
                 
+                # remove atoms when the ordering is messy
+                if bool_stop : 
+                    key2del.append(min_id)
+
                 #updating the new starting point ! 
                 starting_point = new_starting_point
-                
-                #starting_point_idx = new_starting_point_idx
             
+            # delete messy atoms for line
+            for k_del in key2del : 
+                del cluster.local_lines[k_del]
+                cluster.order_line.remove(k_del)
+
             barycenter.append(barycenter_loc)
 
         return barycenter

@@ -117,7 +117,7 @@ class ToyDislocationAnalyser :
         idx_list = self.dislocation_object.BuildSamplingLine(rcut_line=rcut_line, rcut_cluster=rcut_cluster, scale_cluster=scale_cluster)
         self.dislocation_object.RefineSamplingLine(scale=scale_cluster)
         self.dislocation_object.StartingPointCluster()
-        _ = self.dislocation_object.BuildOrderingLine(array_neigh_ext,descriptor=None,idx_neighbor=index_neigh_ext)
+        _ = self.dislocation_object.BuildOrderingLine(array_neigh_ext,scale_cluster,descriptor=None,idx_neighbor=index_neigh_ext)
         tmp_atoms = self.dislocation_object.LineSmoothing(nb_averaging_window=nb_averaging_window)
         self.dislocation_object.ComputeBurgerOnLineSmooth(rcut_burger, nye, descriptor=None)
         return idx_list, tmp_atoms
