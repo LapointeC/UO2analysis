@@ -1,0 +1,21 @@
+<A15>
+    <A15Centers>
+        <c>5 5 5</c>
+    </A15Centers>
+    <A15Type>
+        <t>type1</t>
+    </A15Type>
+
+    <DumbellCenters>
+        <c>8 5 5</c>
+        <c>2 5 5</c>
+        <c>5 5 8</c>
+    </DumbellCenters>
+    
+    <DumbellOrientation>
+        <o>0.0 0.0 1.0</o>
+        <o>0.0 0.0 1.0</o>
+        <o>1.0 0.0 0.0</o>
+    </DumbellOrientation>
+
+</A15>

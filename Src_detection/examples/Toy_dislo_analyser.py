@@ -122,7 +122,7 @@ class ToyDislocationAnalyser :
         self.dislocation_object.ComputeBurgerOnLineSmooth(rcut_burger, nye, descriptor=None)
         return idx_list, tmp_atoms
 
-path_dislo = '/home/lapointe/WorkML/TiAnalysis/Src_detection/dislo/dislo_md.poscar'
+path_dislo = '../data/dislo_md.poscar'
 dislocation_finder = ToyDislocationAnalyser(path_dislo, data_type='vasp')
 dislocation_finder.extend_dislocation((2,1,1))
 outliers_idx = dislocation_finder.get_outliers(nb_std=1.0,

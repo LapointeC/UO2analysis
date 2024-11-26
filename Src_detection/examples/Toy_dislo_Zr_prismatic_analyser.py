@@ -130,8 +130,7 @@ class ToyDislocationAnalyser :
 ##############################
 ### INPUTS
 ##############################
-path_dislo = '/home/lapointe/DisloEmmanuel/small_tests/zr_loop.79_n6_I1.cfg'
-#path_dislo = '/home/lapointe/DisloEmmanuel/small_tests/zr_loop.305_n6_BB.cfg'
+path_dislo = '../data/zr_loop.79_n6_I1.cfg'
 cell = 3.234*np.array([[1.0, 0.0, 0.0],
                        [-0.5, 0.8660254037844386468, 0.0],
                        [0.0, 0.0, 1.598021026592455164]])

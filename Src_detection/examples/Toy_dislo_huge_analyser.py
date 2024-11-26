@@ -152,7 +152,7 @@ class ToyDislocationAnalyser :
         
         return idx_list, tmp_atoms
 
-path_dislo = '/home/lapointe/DisloEmmanuel/small_tests/CONTCAR_p3p00GPa.lmp.gz'
+path_dislo = '../data/CONTCAR_p3p00GPa.lmp.gz'
 dislocation_finder = ToyDislocationAnalyser(path_dislo)
 dislocation_finder.extend_dislocation((1,1,1))
 
