@@ -6,7 +6,7 @@ from .cluster import ClusterDislo, LocalLine
 
 import numpy as np
 from scipy.spatial import ConvexHull
-from ..tools import get_N_neighbour
+from ..tools import get_N_neighbour, get_N_neighbour_huge
 
 class reference_structure(TypedDict) :
     """TypedDict class used to compute the Nye tensor"""
@@ -34,7 +34,8 @@ class DislocationObject :
                 full_system : Atoms, 
                 rcut : float, 
                 structure : reference_structure = {'structure':'bcc',
-                                                   'unit_cell':3.1855*np.eye(3)}) -> None : 
+                                                   'unit_cell':3.1855*np.eye(3)},
+                fast_neigh : bool = False) -> None : 
         """Init method for ```DislocationObject```. Nye tensor calculation needs to used two buffer region for the system
         which are called ```extended_system``` and ```full_system```. Rigourisly only ```extended_system``` is needed to compute deformation
         tensor and ```full_system``` is need to evaluate gradient of the deformation tensor needed to estimate Nye tensor !
@@ -58,6 +59,8 @@ class DislocationObject :
             Dictionnary needed to build the deformation tensor based on reference lattice. 
             Two key are needed in this dictionnary : (i) ```structure``` the cristallographic reference structure and (ii) ```unit_cell``` unit cell of the cristallographic reference 
 
+        fast_neigh : bool 
+            Boolean for fast computation of neighbours in Nye tensor estimation. Not working with PBC !
         """
 
         self.system = system
@@ -66,7 +69,6 @@ class DislocationObject :
         self.rcut = rcut
         self.structure = structure
         self.convex_hull = self.get_convex_hull()
-        #self.OrganizeSystem()
 
         self.dislocations : Dict[int,ClusterDislo] = {}
         self.starting_point_line = None
@@ -85,6 +87,11 @@ class DislocationObject :
                                   [ 0.28867513,  0.5 , -0.815 ], [ 0.28867513, -0.5 , -0.815 ], [-0.8660254,  0.5 , 0.0] , [-0.8660254, -0.5 ,  0.0], [ 0., -1.,  0.0],
                                   [0.8660254, 0.5 , 0.0], [ 0.8660254, -0.5 ,  0.0], [-0.57735027, 1.0 ,  0.815 ], [-0.57735027,  1.0 , -0.815 ], [ 1.15470054, 0.0 , -0.815 ], 
                                   [1.15470054, 0.0, 0.815]  ])
+
+        self.fast_neigh = fast_neigh
+
+        if self.fast_neigh : 
+            warnings.warn(f'!!! You are working with fast_neigh option, periodic boundary conditions will be ignored !!!')
 
     def OrganizeSystem(self) -> None : 
         """Build the starting point local dislocation line for each ```ClusterDislo```. 
@@ -138,7 +145,7 @@ class DislocationObject :
         idx_dislo = 0
         barycenter = np.mean(self.system.positions, axis=0)
         starting_id = np.argmax( np.linalg.norm(self.system.positions - barycenter, axis=1)  )
-        
+        #starting_id = np.argmax( np.sum((self.system.positions - barycenter)**2, axis=1)  )
         
         self.starting_point_line = starting_id
         self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[starting_id].position, self.system[starting_id].symbol ), starting_id, rcut_cluster)  
@@ -152,6 +159,7 @@ class DislocationObject :
             else : 
                 #Find the nearest ClusterDislo to the at_i
                 min_dist_array = [ np.amin(np.linalg.norm(at_i.position - cluster.atoms_dfct.positions, axis=1)) for _,cluster in self.dislocations.items()]
+                #min_dist_array = [ np.amin(np.sum( (at_i.position - cluster.atoms_dfct.positions)**2, axis=1)) for _,cluster in self.dislocations.items()]
                 index_min_key = np.argmin(min_dist_array)
                 closest_cluster = list(self.dislocations.values())[index_min_key]
 
@@ -210,9 +218,11 @@ class DislocationObject :
             for id_j, cluster_j in self.dislocations.items() : 
                 if id_i > id_j :
                     r_ij = np.linalg.norm(cluster_i.center - cluster_j.center)
+                    #r_ijsquare = np.sum((cluster_i.center - cluster_j.center)**2)
                     size_ij = cluster_i.size + cluster_j.size
                     
                     # Aggregation between the two clusters !
+                    #if r_ijsquare < (scale*size_ij)**2 :
                     if r_ij < scale*size_ij :
                         if id_i in dic_aggre.keys() : 
                             if id_j not in dic_aggre[id_i] :
@@ -264,6 +274,7 @@ class DislocationObject :
         Starting point of each cluster is chosen to be the farest of the center of the cluster"""
         for _, cluster in self.dislocations.items(): 
             composite_id_distance = [(idx, np.linalg.norm(line.center - cluster.center)) for idx, line in cluster.local_lines.items() ]
+            #composite_id_distance = [(idx, np.sum((line.center - cluster.center)**2 )) for idx, line in cluster.local_lines.items() ]
             max_id, _ =  sorted(composite_id_distance, key=lambda x: x[1], reverse=True)[0]
             cluster.starting_point = max_id
         return 
@@ -473,6 +484,7 @@ class DislocationObject :
             for id_line in cluster.smooth_local_lines.keys() : 
                 center_line = cluster.smooth_local_lines[id_line].center
                 id_at2keep = [id for id, atom in enumerate(self.system) if np.linalg.norm(atom.position - center_line) < rcut_burger ]
+                #id_at2keep = [id for id, atom in enumerate(self.system) if np.sum((atom.position - center_line)**2 ) < rcut_burger**2 ]
                 
                 if len(id_at2keep) < 4 : 
                     raise ValueError(f'''Number of atom in rcut for id line {id_line} < 5 ({len(id_at2keep)}) 
@@ -483,7 +495,7 @@ class DislocationObject :
                     subset_descriptor = descriptor[id_at2keep , :]
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])   
 
-                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0)
+                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0 )
                 sub_convex_hull = ConvexHull(self.system.positions[id_at2keep])
 
                 burger_vector_line = nye_tensor_id_line@cluster.smooth_local_lines[id_line].local_normal*sub_convex_hull.volume
@@ -539,13 +551,21 @@ class DislocationObject :
         if self.rcut is None :
             raise ValueError('neighbors or cutoff is required')
         else : 
-
-            array_neighbour, index_array, array_neighbour_ext, index_array_ext = get_N_neighbour(self.system,
+            
+            if not self.fast_neigh : 
+                array_neighbour, index_array, array_neighbour_ext, index_array_ext = get_N_neighbour(self.system,
                                                 self.extended_system, 
                                                 self.full_system, 
                                                 self.rcut,
                                                 len(dictionnary_p_vectors[self.structure['structure']]),
                                                 pbc=(True, True, True))
+
+            else : 
+                array_neighbour, index_array, array_neighbour_ext, index_array_ext = get_N_neighbour_huge(self.system,
+                                                self.extended_system,
+                                                self.full_system,
+                                                self.rcut,
+                                                len(dictionnary_p_vectors[self.structure['structure']]))
 
         # Get cos of theta_max
         cos_theta_max = np.cos(theta_max * np.pi / 180)
