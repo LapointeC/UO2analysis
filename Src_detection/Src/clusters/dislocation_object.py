@@ -8,6 +8,28 @@ import numpy as np
 from scipy.spatial import ConvexHull
 from ..tools import get_N_neighbour, get_N_neighbour_huge, merge_dict_
 
+"""Disclaimer 
+Sources for Nye tensor calculation coming from : https://github.com/lmhale99/atomman
+
+Please also cite :
+
+@article{Atomman,
+title = {Atomsk: A tool for manipulating and converting atomic data files},
+journal = {Computer Physics Communications},
+volume = {197},
+pages = {212-219},
+year = {2015},
+issn = {0010-4655},
+doi = {https://doi.org/10.1016/j.cpc.2015.07.012},
+url = {https://www.sciencedirect.com/science/article/pii/S0010465515002817},
+author = {Pierre Hirel},
+keywords = {Atomistic simulations, File conversion, Dislocation, Polycrystal, Nye tensor},
+abstract = {We present a libre, Open Source command-line program named Atomsk, that aims at creating and manipulating atomic systems for the purposes of ab initio calculations, classical atomistic calculations, and visualization, in the areas of computational physics and chemistry. The program can run on GNU/Linux, Apple Mac OS X, and Microsoft Windows platforms. Many file formats are supported, allowing for easy conversion of atomic configuration files. The command-line options allow to construct supercells, insert point defects (vacancies, interstitials), line defects (dislocations, cracks), plane defects (stacking faults), as well as other transformations. Several options can be applied consecutively, allowing for a comprehensive workflow from a unit cell to the final atomic system. Some modes allow to construct complex structures, or to perform specific analysis of atomic systems.
+Program summary
+Program title: Atomsk Catalogue identifier: AEXM_v1_0 Program summary URL:http://cpc.cs.qub.ac.uk/summaries/AEXM_v1_0.html Program obtainable from: CPC Program Library, Queen’s University, Belfast, N. Ireland Licensing provisions: GNU/GPL version 3 or any later version No. of lines in distributed program, including test data, etc.: 61,450 No. of bytes in distributed program, including test data, etc.: 539,898 Distribution format: tar.gz Programming language: Fortran 90. Computer: All computers with a Fortran compiler supporting at least Fortran 90. Operating system: All operating systems with such a compiler. Some of the Makefiles and scripts depend on a Unix-like system and need modification under Windows. RAM: Typically 32 bytes ×  N, where N is the number of particles. Classification: 4.14, 7.1. External routines: LAPACK Nature of problem: Atomistic simulations require the generation of atomic data files. Few software are available to construct atomic systems containing dislocations, especially in anisotropic media. Solution method: Atomsk is a unified program that allows to generate, convert and transform atomic systems for the purposes of ab initio calculations, classical atomistic simulations, or visualization. It supports many lattice types, all atom chemical species, and supports systems described with the ionic core–shell model. It allows to construct dislocations and analyze them, and perform post-treatment of simulation output files. Restrictions: no support for molecular bonds; limit of 2 billions particles. Unusual features: dislocations in anisotropic media; computation of the Nye tensor; generation of polycrystal from any type of lattice; support for ionic core–shell models and analysis of electric polarization. Additional comments: the program and its documentation are available at: http://atomsk.univ-lille1.fr Running time: spans from a fraction of a second to several minutes depending on the number of particles in the atomic system, the mode, and the machine performance.}
+}
+"""
+
 class reference_structure(TypedDict) :
     """TypedDict class used to compute the Nye tensor"""
     structure : str
@@ -534,7 +556,25 @@ class DislocationObject :
         """Computes strain properties and Nye tensor for ```system``` object. As described in the ```__init__``` documentation, 
         Nye tensor calculation need to used two buffer region : (i) ```extended_system``` and (ii) ```full_atoms```. 
 
-        !ADD THE REFERENCE FOR THE ROUTINE!
+        Sources coming from : https://github.com/lmhale99/atomman
+
+        Please also cite :
+        
+        @article{Atomman,
+        title = {Atomsk: A tool for manipulating and converting atomic data files},
+        journal = {Computer Physics Communications},
+        volume = {197},
+        pages = {212-219},
+        year = {2015},
+        issn = {0010-4655},
+        doi = {https://doi.org/10.1016/j.cpc.2015.07.012},
+        url = {https://www.sciencedirect.com/science/article/pii/S0010465515002817},
+        author = {Pierre Hirel},
+        keywords = {Atomistic simulations, File conversion, Dislocation, Polycrystal, Nye tensor},
+        abstract = {We present a libre, Open Source command-line program named Atomsk, that aims at creating and manipulating atomic systems for the purposes of ab initio calculations, classical atomistic calculations, and visualization, in the areas of computational physics and chemistry. The program can run on GNU/Linux, Apple Mac OS X, and Microsoft Windows platforms. Many file formats are supported, allowing for easy conversion of atomic configuration files. The command-line options allow to construct supercells, insert point defects (vacancies, interstitials), line defects (dislocations, cracks), plane defects (stacking faults), as well as other transformations. Several options can be applied consecutively, allowing for a comprehensive workflow from a unit cell to the final atomic system. Some modes allow to construct complex structures, or to perform specific analysis of atomic systems.
+        Program summary
+        Program title: Atomsk Catalogue identifier: AEXM_v1_0 Program summary URL:http://cpc.cs.qub.ac.uk/summaries/AEXM_v1_0.html Program obtainable from: CPC Program Library, Queen’s University, Belfast, N. Ireland Licensing provisions: GNU/GPL version 3 or any later version No. of lines in distributed program, including test data, etc.: 61,450 No. of bytes in distributed program, including test data, etc.: 539,898 Distribution format: tar.gz Programming language: Fortran 90. Computer: All computers with a Fortran compiler supporting at least Fortran 90. Operating system: All operating systems with such a compiler. Some of the Makefiles and scripts depend on a Unix-like system and need modification under Windows. RAM: Typically 32 bytes ×  N, where N is the number of particles. Classification: 4.14, 7.1. External routines: LAPACK Nature of problem: Atomistic simulations require the generation of atomic data files. Few software are available to construct atomic systems containing dislocations, especially in anisotropic media. Solution method: Atomsk is a unified program that allows to generate, convert and transform atomic systems for the purposes of ab initio calculations, classical atomistic simulations, or visualization. It supports many lattice types, all atom chemical species, and supports systems described with the ionic core–shell model. It allows to construct dislocations and analyze them, and perform post-treatment of simulation output files. Restrictions: no support for molecular bonds; limit of 2 billions particles. Unusual features: dislocations in anisotropic media; computation of the Nye tensor; generation of polycrystal from any type of lattice; support for ionic core–shell models and analysis of electric polarization. Additional comments: the program and its documentation are available at: http://atomsk.univ-lille1.fr Running time: spans from a fraction of a second to several minutes depending on the number of particles in the atomic system, the mode, and the machine performance.}
+        }
 
         Parameters
         ----------
@@ -716,7 +756,10 @@ class DislocationObject :
         self.BuildSamplingLine(rcut_line=rcut_line, rcut_cluster=rcut_cluster, scale_cluster=scale_cluster)
         self.StartingPointCluster()
         self.RefineSamplingLine(scale=scale_cluster)
-        self.BuildOrderingLine(array_neighbour_ext, descriptor=descritpor, idx_neighbor=index_neighbour_ext)
+        self.BuildOrderingLine(array_neighbour_ext,
+                               scale_cluster, 
+                               descriptor=descritpor, 
+                               idx_neighbor=index_neighbour_ext)
         if smoothing_line is not None : 
             self.LineSmoothing(nb_averaging_window=smoothing_line['nb_averaging_window'])
             self.ComputeBurgerOnLineSmooth(rcut_burger, Nye_tensor, descriptor=descritpor)
