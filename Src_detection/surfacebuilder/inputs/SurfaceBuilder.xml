@@ -1,0 +1,15 @@
+<SurfaceBuilder>
+	<RemeshSurface>
+		<rcut>5.0</rcut>
+		<beta>3.0</beta>
+	</RemeshSurface>
+
+        <hklVectors> 
+			<v>1 1 1</v>
+			<v>-1 -2 -3</v>
+	</hklVectors>	
+	<SlurmCommand>
+		Roger is 
+		a big idiot 
+	</SlurmCommand>
+</SurfaceBuilder>

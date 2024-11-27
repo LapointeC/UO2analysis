@@ -6,7 +6,7 @@ from .cluster import ClusterDislo, LocalLine
 
 import numpy as np
 from scipy.spatial import ConvexHull
-from ..tools import get_N_neighbour, get_N_neighbour_huge, merge_dict_
+from ..tools import get_N_neighbour, merge_dict_ #, get_N_neighbour_huge
 
 """Disclaimer 
 Sources for Nye tensor calculation coming from : https://github.com/lmhale99/atomman
@@ -57,7 +57,7 @@ class DislocationObject :
                 rcut : float, 
                 structure : reference_structure = {'structure':'bcc',
                                                    'unit_cell':3.1855*np.eye(3)},
-                fast_neigh : bool = False) -> None : 
+                kind_neigh : str = 'fast-pbc') -> None : 
         """Init method for ```DislocationObject```. Nye tensor calculation needs to used two buffer region for the system
         which are called ```extended_system``` and ```full_system```. Rigourisly only ```extended_system``` is needed to compute deformation
         tensor and ```full_system``` is need to evaluate gradient of the deformation tensor needed to estimate Nye tensor !
@@ -110,9 +110,9 @@ class DislocationObject :
                                   [0.8660254, 0.5 , 0.0], [ 0.8660254, -0.5 ,  0.0], [-0.57735027, 1.0 ,  0.815 ], [-0.57735027,  1.0 , -0.815 ], [ 1.15470054, 0.0 , -0.815 ], 
                                   [1.15470054, 0.0, 0.815]  ])
 
-        self.fast_neigh = fast_neigh
+        self.kind_neigh = kind_neigh
 
-        if self.fast_neigh : 
+        if self.kind_neigh == 'fast' : 
             warnings.warn(f'!!! You are working with fast_neigh option, periodic boundary conditions will be ignored !!!')
 
     def OrganizeSystem(self) -> None : 
@@ -258,8 +258,7 @@ class DislocationObject :
                                 #print(f'Here id_j {id_j} append {id_i}') 
                                 dic_aggre[id_j].append(id_i)
 
-                        else :
-                            
+                        else :     
                             #print('Will add new key')
                             #print(id_i, id_j)
                             # check if we have to add a new key
@@ -548,6 +547,7 @@ class DislocationObject :
                 sub_convex_hull = ConvexHull(self.system.positions[id_at2keep])
 
                 burger_vector_line = nye_tensor_id_line@cluster.smooth_local_lines[id_line].local_normal*sub_convex_hull.volume
+                print(burger_vector_line)
                 cluster.smooth_local_lines[id_line].update_burger(burger_vector_line)
         return 
 
@@ -559,7 +559,7 @@ class DislocationObject :
         Sources coming from : https://github.com/lmhale99/atomman
 
         Please also cite :
-        
+
         @article{Atomman,
         title = {Atomsk: A tool for manipulating and converting atomic data files},
         journal = {Computer Physics Communications},
@@ -618,22 +618,12 @@ class DislocationObject :
         if self.rcut is None :
             raise ValueError('neighbors or cutoff is required')
         else : 
-            
-            if not self.fast_neigh : 
-                array_neighbour, index_array, array_neighbour_ext, index_array_ext = get_N_neighbour(self.system,
-                                                self.extended_system, 
-                                                self.full_system, 
-                                                self.rcut,
-                                                len(dictionnary_p_vectors[self.structure['structure']]),
-                                                pbc=(True, True, True))
-
-            else : 
-                array_neighbour, index_array, array_neighbour_ext, index_array_ext = get_N_neighbour_huge(self.system,
-                                                self.extended_system,
-                                                self.full_system,
-                                                self.rcut,
-                                                len(dictionnary_p_vectors[self.structure['structure']]))
-
+            array_neighbour, index_array, array_neighbour_ext, index_array_ext = get_N_neighbour(self.system,
+                                                                                                 self.extended_system,
+                                                                                                 self.full_system,
+                                                                                                 self.rcut,
+                                                                                                 len(dictionnary_p_vectors[self.structure['structure']]),
+                                                                                                 kind_neigh=self.kind_neigh)
         # Get cos of theta_max
         cos_theta_max = np.cos(theta_max * np.pi / 180)
 

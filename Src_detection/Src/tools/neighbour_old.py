@@ -88,12 +88,13 @@ def get_neighborhood(
     return edge_index, shifts, unit_shifts, distance
 
 
-def get_N_neighbour_graph(atoms : Atoms, 
+def get_N_neighbour(atoms : Atoms, 
                     extended_atoms : Atoms, 
+                    full_atoms : Atoms, 
                     cutoff : float, 
                     N : int, 
                     pbc : Tuple[bool, bool, bool] = (True, True, True), 
-                    threshold : float = 1e-2) -> Tuple[np.ndarray, np.ndarray] :
+                    threshold : float = 1e-2) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] :
     """Build the truncated neighborhood for a given system of atoms. Neighborhood is truncated to the N neighbour.
     Two neighborhood are computed : (i) for the system and (ii) for the extended system. These calculation are mandatory
     to evaluate Nye tensor of the system.
@@ -131,11 +132,44 @@ def get_N_neighbour_graph(atoms : Atoms,
 
     np.ndarray 
         array of index of neighbours for ATOMS SYSTEM (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
+
+    np.ndarray 
+        array of neighbours for EXTENDED_ATOMS SYSTEM (M,N,3) for each line i -> { r_{neigh_i,n} - r_i }_{1 \leq n \leq N} (cartesian)
+
+    np.ndarray 
+        array of index of neighbours for EXTENDED_ATOMS SYSTEM (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
     """
 
     array_neighbour = np.zeros((len(atoms),N,3))
     index_neighbour = np.zeros((len(atoms),N))
-   
+    array_neighbour_extended = np.zeros((len(extended_atoms),N,3))
+    index_neighbour_extended = np.zeros((len(extended_atoms),N))
+
+    neighbors_ij, neighbors_shift, _, _ = get_neighborhood(full_atoms.positions,
+                                                       cutoff,
+                                                       pbc,
+                                                       full_atoms.cell[:],
+                                                       true_self_interaction=False)
+
+    for full_id, full_at in enumerate(full_atoms) :
+            #check if atom is in the extended system
+            composite_id_distance = [(idx, np.linalg.norm(ext_at.position - full_at.position)) for idx, ext_at in enumerate(extended_atoms) ]
+            k, min_dist =  sorted(composite_id_distance, key=lambda x: x[1])[0]
+            if min_dist < threshold :
+                mask_atom_k = neighbors_ij[0,:] == full_id
+                r_kj_mask = full_atoms.positions[ neighbors_ij[1,:][mask_atom_k] ] - full_atoms.positions[ neighbors_ij[0,:][mask_atom_k] ] + neighbors_shift[mask_atom_k]
+
+                if r_kj_mask.shape[0] < N :
+                    raise ValueError(f'Number of neighbour is too small to continue, cutoff raduis should be increased (N found = {r_kj_mask.shape[0]}) / {N}')
+
+                sorted_index_kj = np.argsort(np.linalg.norm(r_kj_mask, axis=1))
+                index_neighbour_extended[k,:] = neighbors_ij[1,:][mask_atom_k][sorted_index_kj][:N]
+                array_neighbour_extended[k,:,:] = r_kj_mask[sorted_index_kj][:N]
+                
+            
+            else : 
+                continue
+    
     neighbors_ij, neighbors_shift, _, _ = get_neighborhood(extended_atoms.positions,
                                                    cutoff,
                                                    pbc,
@@ -162,7 +196,7 @@ def get_N_neighbour_graph(atoms : Atoms,
                 continue
 
 
-    return array_neighbour, index_neighbour.astype(int)
+    return array_neighbour, index_neighbour.astype(int), array_neighbour_extended, index_neighbour_extended.astype(int)
 
 def build_extended_neigh_(system : Atoms,
                           list_idx: List[int], 
@@ -237,9 +271,10 @@ def build_extended_neigh_(system : Atoms,
     return local_dislocation, extended_dislocation, full_dislocation
 
 def get_N_neighbour_huge(atoms : Atoms, 
-                    extended_atoms : Atoms,
+                    extended_atoms : Atoms, 
+                    full_atoms : Atoms, 
                     cutoff : float, 
-                    N : int) -> Tuple[np.ndarray, np.ndarray] :
+                    N : int) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] :
     """Build the truncated neighborhood for a given system of atoms. Neighborhood is truncated to the N neighbour.
     Two neighborhood are computed : (i) for the system and (ii) for the extended system. These calculation are mandatory
     to evaluate Nye tensor of the system. This version does not take into account the periodic bondary conditions but is very fast !
@@ -253,6 +288,9 @@ def get_N_neighbour_huge(atoms : Atoms,
     extended_atoms : Atoms 
         Extended system to compute the neighborhood
     
+    full_atoms : Atoms 
+        Second overshell used to compute the neighborhood of extended_atoms system
+
     cutoff : float 
         Cutoff raduis to compute neighbours
     
@@ -268,16 +306,46 @@ def get_N_neighbour_huge(atoms : Atoms,
     np.ndarray 
         array of index of neighbours for ATOMS SYSTEM (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
 
-            """
+    np.ndarray 
+        array of neighbours for EXTENDED_ATOMS SYSTEM (M,N,3) for each line i -> { r_{neigh_i,n} - r_i }_{1 \leq n \leq N} (cartesian)
+
+    np.ndarray 
+        array of index of neighbours for EXTENDED_ATOMS SYSTEM (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
+    """
 
 
     # building neighbour arrays
     array_neighbour = np.zeros((len(atoms),N,3))
     index_neighbour = np.zeros((len(atoms),N))
+    array_neighbour_extended = np.zeros((len(extended_atoms),N,3))
+    index_neighbour_extended = np.zeros((len(extended_atoms),N))
 
     # starting with extended neighbour 
     positions_e = extended_atoms.positions
+    positions_f = full_atoms.positions
     rcut_full_sq = cutoff**2
+
+    for id_e, pos_e in enumerate(positions_e) :
+        # Calculate the squared distances
+        diff = positions_f - pos_e
+        distances_sq = np.einsum('ij,ij->i', diff, diff)
+    
+        # Find indices where distance is within rcut_full
+        within_full = np.where((distances_sq > 0) & (distances_sq < rcut_full_sq))[0]
+        
+        # Building order neighbour list ! 
+        if len(within_full) < N : 
+            raise ValueError(f'Number of neighbour is too small to continue, cutoff raduis should be increased (N found = {len(within_full)}/{N})')
+        #print(within_full, distances_sq[within_full],id_e)
+        
+        sorted_index_ke = np.argsort(distances_sq[within_full])
+        sorted_neigh_ke = within_full[sorted_index_ke][:N]
+
+        #print(sorted_neigh_ke, distances_sq[sorted_index_ke])
+        #exit(0)
+        # Update neighbours
+        array_neighbour_extended[id_e,:,:] = positions_f[sorted_neigh_ke] - pos_e
+        index_neighbour_extended[id_e,:] = sorted_neigh_ke
 
     # here is the dislocation system 
     positions_d = atoms.positions
@@ -301,79 +369,14 @@ def get_N_neighbour_huge(atoms : Atoms,
         index_neighbour[id_d,:] = sorted_neigh_kd
 
 
-    return array_neighbour, index_neighbour.astype(int)
+    return array_neighbour, index_neighbour.astype(int), array_neighbour_extended, index_neighbour_extended.astype(int)
 
 def get_N_neighbour_Cosmin(system : Atoms, 
                            extended_system : Atoms,
+                           full_system : Atoms,
                            cell : np.ndarray, 
                            cutoff_distance : float, 
-                           N : int) -> Tuple[np.ndarray, np.ndarray]:
-    """Build the truncated neighborhood for a given system of atoms. Neighborhood is truncated to the N neighbour.
-    Two neighborhood are computed : (i) for the system and (ii) for the extended system. These calculation are mandatory
-    to evaluate Nye tensor of the system. Fast implementation from Cosmin that is taking into acount periodic boundary conditions
-
-    Parameters
-    ----------
-
-    atoms : Atoms 
-        System to compute the neighborhood
-
-    extended_atoms : Atoms 
-        Extended system to compute the neighborhood
-    
-    cell : np.ndarray 
-        Supercell containing the whole system to take into account pbc
-
-    cutoff : float 
-        Cutoff raduis to compute neighbours
-    
-    N : int 
-        Truncation bound for number of neighbours of each atoms
-    
-    Returns:
-    --------
-
-    np.ndarray 
-        array of neighbours for ATOMS SYSTEM (M,N,3) for each line i -> { r_{neigh_i,n} - r_i }_{1 \leq n \leq N} (cartesian)
-
-    np.ndarray 
-        array of index of neighbours for ATOMS SYSTEM (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
-    """
-
-    # Build positions arrays
-    positions_d = system.positions
-    positions_e = extended_system.positions
-
-    # building neighbour arrays
-    array_neighbour = np.zeros((len(system),N,3))
-    index_neighbour = np.zeros((len(system),N))
-
-    # Find neighbors for each atom using neighboring cells
-    for i_d in range(positions_d.shape[0]):
-        dX = - positions_d[i_d] + positions_e
-        dX -= np.round(np.dot(dX, np.linalg.inv(cell))) @ cell        
-        distance = np.sum(dX**2, axis=1)
-
-        within_full = np.where((distance < cutoff_distance**2) & (distance > 0))[0]
-
-        if len(within_full) < N : 
-            raise ValueError(f'Number of neighbour is too small to continue, cutoff raduis should be increased (N found = {len(within_full)}/{N})')
-        sorted_index_kd = np.argsort(distance[within_full])
-        sorted_neigh_kd = within_full[sorted_index_kd][:N]
-
-        # Update neighbours
-        array_neighbour[i_d,:,:] = dX[sorted_neigh_kd]
-        index_neighbour[i_d,:] = sorted_neigh_kd
-
-    return array_neighbour, index_neighbour.astype(int)
-
-
-def get_N_neighbour(system : Atoms, 
-                           extended_system : Atoms,
-                           full_system : Atoms, 
-                           cutoff_distance : float, 
-                           N : int,
-                           kind_neigh : str = 'graph-ase'):
+                           N : int):
     """Build the truncated neighborhood for a given system of atoms. Neighborhood is truncated to the N neighbour.
     Two neighborhood are computed : (i) for the system and (ii) for the extended system. These calculation are mandatory
     to evaluate Nye tensor of the system. Fast implementation from Cosmin that is taking into acount periodic boundary conditions
@@ -415,46 +418,98 @@ def get_N_neighbour(system : Atoms,
         array of index of neighbours for EXTENDED_ATOMS SYSTEM (M,N) for each line i -> {idx_{neigh_i,n}}_{1 \leq n \leq N}
     """
 
-    list_implemented_kind = ['graph-ase', 'fast', 'fast-pbc']
-    if kind_neigh not in list_implemented_kind :
-        raise NotImplementedError(f'... Kind : {kind_neigh} is not implemented, possible kind are {list_implemented_kind} ...')
+    # Build positions arrays
+    positions_d = system.positions
+    positions_e = extended_system.positions
+    positions_f = full_system.positions
 
-    if kind_neigh == 'graph-ase' : 
-        pbc = (True,True,True)
-        array_neighbour_extended, index_neighbour_extended = get_N_neighbour_graph(extended_system,
-                                                                                   full_system,
-                                                                                   cutoff_distance,
-                                                                                   N,
-                                                                                   pbc=pbc)
-        array_neighbour, index_neighbour = get_N_neighbour_graph(system,
-                                                                 extended_system,
-                                                                 cutoff_distance,
-                                                                 N,
-                                                                 pbc=pbc)
+    # building neighbour arrays
+    array_neighbour = np.zeros((len(system),N,3))
+    index_neighbour = np.zeros((len(system),N))
+    array_neighbour_extended = np.zeros((len(extended_system),N,3))
+    index_neighbour_extended = np.zeros((len(extended_system),N))
 
-    elif kind_neigh == 'fast' : 
-        array_neighbour_extended, index_neighbour_extended = get_N_neighbour_huge(extended_system,
-                                                                                  full_system,
-                                                                                  cutoff_distance,
-                                                                                  N)
-        array_neighbour, index_neighbour = get_N_neighbour_huge(system,
-                                                                extended_system,
-                                                                cutoff_distance,
-                                                                N)
+    # Compute the number of cells in each dimension
+    n_cells = np.ceil(np.linalg.norm(cell, axis=1) / cutoff_distance).astype(int)
 
-    elif kind_neigh == 'fast-pbc' :
-        print('fast-pbc') 
-        cell = full_system.cell[:]
-        print('ext')
-        array_neighbour_extended, index_neighbour_extended = get_N_neighbour_Cosmin(extended_system,
-                                                                                    full_system,
-                                                                                    cell,
-                                                                                    cutoff_distance,
-                                                                                    N)
-        array_neighbour, index_neighbour = get_N_neighbour_Cosmin(system,
-                                                                  extended_system,
-                                                                  cell,
-                                                                  cutoff_distance,
-                                                                  N)
+    # starting with extended system
+    # Create an empty list for each cell
+    total_cells = np.prod(n_cells)
+    cells_f = [[] for _ in range(total_cells)]
+
+    # Assign each atom to its corresponding cell
+    fractional_coords = np.linalg.solve(cell.T, positions_f.T).T - 0.5
+    cell_coords = np.floor(fractional_coords).astype(int)
+    for i in range(positions_f.shape[0]):
+        cell_index = sum(cell_coords[i, d] * (n_cells[d]**k) for d, k in enumerate([0, 1, 2]))
+        cells_f[cell_index].append(i)
+
+    # Find neighbors for each atom using neighboring cells
+    for i_e in range(positions_e.shape[0]):
+        cell_coords_i = cell_coords[i_e]
+        idx_subset_j = []
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                for dz in range(-1, 2):
+                    offset = np.array([dx, dy, dz])
+                    neighboring_cell_coords = (cell_coords_i + offset) % n_cells
+                    cell_index_j = sum(neighboring_cell_coords[d] * (n_cells[d]**k) for d, k in enumerate([0, 1, 2]))        
+                    idx_subset_j += cells_f[cell_index_j]
+        
+        idx_subset_j = np.array(idx_subset_j)
+        dX = positions_e[i_e] - positions_f[idx_subset_j]
+        dX -= np.round(np.dot(dX, np.linalg.inv(cell))) @ cell        
+        distance = np.sum(dX**2, axis=1)
+        
+        mask_d = (distance < cutoff_distance**2) & (distance > 0)
+        mask_id = idx_subset_j != i
+        full_mask = mask_d & mask_id
+    
+        #sorted_index_ke = np.argsort(distance[full_mask])
+        idx2keep = np.where(full_mask)[0] 
+
+        if  dX[idx2keep].shape[0]  > 0 :
+            array_neighbour_extended[i_e,:,:] = dX[full_mask][:N]
+            index_neighbour_extended[i_e,:] = idx_subset_j[full_mask][:N]
+
+    # here is the dislocation system
+    # Create an empty list for each cell
+    total_cells = np.prod(n_cells)
+    cells_e = [[] for _ in range(total_cells)]
+
+    # Assign each atom to its corresponding cell
+    fractional_coords = np.linalg.solve(cell.T, positions_e.T).T - 0.5
+    cell_coords = np.floor(fractional_coords).astype(int)
+    for i in range(positions_e.shape[0]):
+        cell_index = sum(cell_coords[i, d] * (n_cells[d]**k) for d, k in enumerate([0, 1, 2]))
+        cells_e[cell_index].append(i)
+
+    # Find neighbors for each atom using neighboring cells
+    for i_d in range(positions_d.shape[0]):
+        cell_coords_i = cell_coords[i_d]
+        idx_subset_j = []
+        for dx in range(-1, 2):
+            for dy in range(-1, 2):
+                for dz in range(-1, 2):
+                    offset = np.array([dx, dy, dz])
+                    neighboring_cell_coords = (cell_coords_i + offset) % n_cells
+                    cell_index_j = sum(neighboring_cell_coords[d] * (n_cells[d]**k) for d, k in enumerate([0, 1, 2]))        
+                    idx_subset_j += cells_e[cell_index_j]
+        
+        idx_subset_j = np.array(idx_subset_j)
+        dX = positions_d[i_d] - positions_e[idx_subset_j]
+        dX -= np.round(np.dot(dX, np.linalg.inv(cell))) @ cell        
+        distance = np.sum(dX**2, axis=1)
+        
+        mask_d = (distance < cutoff_distance**2) & (distance > 0)
+        mask_id = idx_subset_j != i
+        full_mask = mask_d & mask_id
+    
+        idx2keep = np.where(full_mask)[0] 
+
+        if  dX[idx2keep].shape[0]  > 0 :
+            sorted_index = np.argsort(distance[full_mask])
+            array_neighbour[i_d,:,:] = dX[full_mask][sorted_index][:N]
+            index_neighbour[i_d,:] = idx_subset_j[full_mask][sorted_index][:N]
 
     return array_neighbour, index_neighbour.astype(int), array_neighbour_extended, index_neighbour_extended.astype(int)

@@ -138,7 +138,7 @@ class ToyDislocationAnalyser :
                                                     rcut_dislo, 
                                                     structure={'structure':self.target_struct_str,
                                                                'unit_cell':unit_cell},
-                                                    fast_neigh=True)
+                                                    kind_neigh='fast')
         print('... Starting Nye tensor computation ...')
         nye, array_neigh, index_neigh, array_neigh_ext, index_neigh_ext = self.dislocation_object.NyeTensor()
         print('... Starting building of sampling line ...')
