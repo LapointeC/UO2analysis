@@ -229,6 +229,10 @@ def build_extended_neigh_(system : Atoms,
     full_list = list(full_set)
     ext_list = list(ext_set)
     
+    #organise lists for Nye tensor
+    ext_list = list_idx + [el for el in ext_list if el not in list_idx]
+    full_list = ext_list + [el for el in full_list if el not in ext_list]
+
     # Update the local, extended, and full dislocation data
     local_dislocation = system.copy()[list_idx]
     extended_dislocation = system.copy()[ext_list]
@@ -443,9 +447,7 @@ def get_N_neighbour(system : Atoms,
                                                                 N)
 
     elif kind_neigh == 'fast-pbc' :
-        print('fast-pbc') 
         cell = full_system.cell[:]
-        print('ext')
         array_neighbour_extended, index_neighbour_extended = get_N_neighbour_Cosmin(extended_system,
                                                                                     full_system,
                                                                                     cell,
