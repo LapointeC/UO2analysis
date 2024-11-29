@@ -71,7 +71,7 @@ class ToyDislocationAnalyser :
 
         # selecty only atoms with low volume (to eliminate free surface)
         mask_volume = volume_bar < mean_volume + nb_std*std_volume
-        return id_atoms_bar[mask_volume]
+        return id_atoms_bar[mask_volume].tolist()
 
     @timeit
     def build_extended_neigh(self, list_idx: List[int], rcut_extended: float = 4.5, rcut_full: float = 7.0) -> Tuple[np.ndarray, np.ndarray]:
@@ -94,12 +94,16 @@ class ToyDislocationAnalyser :
         ext_list = np.unique(np.where(ext_mask)[0])
         full_list = np.unique(np.where(full_mask)[0])
 
+        #organise lists for Nye tensor
+        ext_list = list_idx + [el for el in ext_list if el not in list_idx]
+        full_list = ext_list + [el for el in full_list if el not in ext_list]
+
         # Update the local, extended, and full dislocation data
         self.local_dislocation = self.dislocation.copy()[list_idx]
         self.extended_dislocation = self.dislocation.copy()[ext_list]
         self.full_dislocation = self.dislocation.copy()[full_list]
 
-        return ext_list, full_list
+        return np.array(ext_list), np.array(full_list)
 
 
     @timeit
@@ -131,6 +135,7 @@ class ToyDislocationAnalyser :
 ### INPUTS
 ##############################
 path_dislo = '../data/zr_loop.79_n6_I1.cfg'
+#path_dislo = '/home/lapointe/DisloEmmanuel/small_tests/zr_loop.305_n6_BB.cfg'
 cell = 3.234*np.array([[1.0, 0.0, 0.0],
                        [-0.5, 0.8660254037844386468, 0.0],
                        [0.0, 0.0, 1.598021026592455164]])
@@ -147,8 +152,10 @@ sample_id, line_atoms = dislocation_finder.perform_dislocation_analysis(cell,
                                                                         rcut_line=3.5,
                                                                         rcut_cluster=5.5,
                                                                         scale_cluster=3.0,
-                                                                        nb_averaging_window=2,
-                                                                        rcut_burger=7.5)
+                                                                        nb_averaging_window=4,
+                                                                        rcut_burger=6.5)
+# put into np.array for visualisation
+outliers_idx = np.array(outliers_idx)
 
 print(line_atoms)
 frame_object = FrameOvito([dislocation_finder.dislocation])

@@ -66,7 +66,7 @@ class ToyDislocationAnalyser :
 
         # selecty only atoms with low volume (to eliminate free surface)
         mask_volume = volume_bar < mean_volume + nb_std*std_volume
-        return id_atoms_bar[mask_volume]
+        return id_atoms_bar[mask_volume].tolist()
 
 
     @timeit
@@ -90,12 +90,16 @@ class ToyDislocationAnalyser :
         ext_list = np.unique(np.where(ext_mask)[0])
         full_list = np.unique(np.where(full_mask)[0])
 
+        #organise lists for Nye tensor
+        ext_list = list_idx + [el for el in ext_list if el not in list_idx]
+        full_list = ext_list + [el for el in full_list if el not in ext_list]
+
         # Update the local, extended, and full dislocation data
         self.local_dislocation = self.dislocation.copy()[list_idx]
         self.extended_dislocation = self.dislocation.copy()[ext_list]
         self.full_dislocation = self.dislocation.copy()[full_list]
 
-        return ext_list, full_list
+        return np.array(ext_list), np.array(full_list)
 
 
     @timeit
@@ -128,13 +132,16 @@ dislocation_finder.extend_dislocation((2,1,1))
 outliers_idx = dislocation_finder.get_outliers(nb_std=1.0,
                                 rcut=3.2)
 extended_outlier, full_outlier = dislocation_finder.build_extended_neigh(outliers_idx, rcut_extended=5.5, rcut_full=8.0)
-sample_id, line_atoms = dislocation_finder.perform_dislocation_analysis(3.1855*np.eye(3),
+sample_id, line_atoms = dislocation_finder.perform_dislocation_analysis(3.1882*np.eye(3),
                                                                         rcut_dislo=4.5,
                                                                         rcut_line=4.5,
                                                                         rcut_cluster=5.5,
                                                                         scale_cluster=2.0,
                                                                         nb_averaging_window=4,
                                                                         rcut_burger=5.0)
+
+# put into np.array for visualisation
+outliers_idx = np.array(outliers_idx)
 
 frame_object = FrameOvito([dislocation_finder.dislocation])
 naive_modifier = NaiveOvitoModifier(dict_color={'firebrick':extended_outlier,

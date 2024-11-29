@@ -6,7 +6,13 @@ from .cluster import ClusterDislo, LocalLine
 
 import numpy as np
 from scipy.spatial import ConvexHull
-from ..tools import get_N_neighbour, merge_dict_ #, get_N_neighbour_huge
+from ..tools import get_N_neighbour, merge_dict_
+
+from ovito.io.ase import ase_to_ovito
+from ovito.pipeline import Pipeline, PythonSource, StaticSource
+from ovito.io import *
+
+from ovito.modifiers import VoronoiAnalysisModifier
 
 """Disclaimer 
 Sources for Nye tensor calculation coming from : https://github.com/lmhale99/atomman
@@ -57,7 +63,8 @@ class DislocationObject :
                 rcut : float, 
                 structure : reference_structure = {'structure':'bcc',
                                                    'unit_cell':3.1855*np.eye(3)},
-                kind_neigh : str = 'fast-pbc') -> None : 
+                kind_neigh : str = 'fast-pbc',
+                neigh_factor : float = 5.0) -> None : 
         """Init method for ```DislocationObject```. Nye tensor calculation needs to used two buffer region for the system
         which are called ```extended_system``` and ```full_system```. Rigourisly only ```extended_system``` is needed to compute deformation
         tensor and ```full_system``` is need to evaluate gradient of the deformation tensor needed to estimate Nye tensor !
@@ -83,6 +90,9 @@ class DislocationObject :
 
         fast_neigh : bool 
             Boolean for fast computation of neighbours in Nye tensor estimation. Not working with PBC !
+        
+        neigh_factor : float 
+            Rescaling factor for Burger vector computation, normalised the value of volume integration
         """
 
         self.system = system
@@ -111,9 +121,39 @@ class DislocationObject :
                                   [1.15470054, 0.0, 0.815]  ])
 
         self.kind_neigh = kind_neigh
+        self.neigh_factor = neigh_factor
+        self.voro_vol = self.ComputeVoronoiVolume(self.extended_system)
+
 
         if self.kind_neigh == 'fast' : 
             warnings.warn(f'!!! You are working with fast_neigh option, periodic boundary conditions will be ignored !!!')
+
+    def ComputeVoronoiVolume(self, atoms : Atoms) -> np.ndarray : 
+        """Compute Voronoi volume for a given ```Atoms``` system 
+        
+        Parameters
+        ----------
+
+        atoms : ```Atoms```
+            Atoms object to compute Voronoi volumes
+
+        Returns
+        -------
+
+        np.ndarray 
+            Array containing atomic Voronoi volumes
+
+        """
+        data_ovito = ase_to_ovito(atoms)
+        pipeline = Pipeline(source = StaticSource(data = data_ovito))
+        voro = VoronoiAnalysisModifier(
+            compute_indices = True,
+            use_radii = False,
+            edge_threshold = 0.1)
+
+        pipeline.modifiers.append(voro)
+        data = pipeline.compute() 
+        return data.particles['Atomic Volume'][:]
 
     def OrganizeSystem(self) -> None : 
         """Build the starting point local dislocation line for each ```ClusterDislo```. 
@@ -470,7 +510,34 @@ class DislocationObject :
             barycenter.append(barycenter_loc)
 
         return barycenter
-            
+
+    def FindAtomsLocalLines(self, local_line : LocalLine, rcut_burger : float) -> List[int] : 
+        """Build subset of index of ```Atoms``` which are part of a given ```LocalLine```
+        
+        Parameters
+        ----------
+
+        local_line : ```LocalLine```
+            ```LocalLine``` to compute local ```Atoms```
+
+        rcut_burger : float 
+            Cutoff raduis for surface integration (in AA)
+
+        Returns
+        -------
+
+        List[int]
+            Subset of indexes in ```Atoms``` system
+
+        """
+        center_line = local_line.center
+        local_direction = local_line.local_normal
+        local_norm = local_line.norm_normal
+        return [id for id, atom in enumerate(self.system) 
+                    if np.sum((atom.position - center_line)**2) < rcut_burger**2 # projection around burger
+                    and np.abs(np.dot(atom.position - center_line,local_direction)) < 0.5*local_norm ] # projection on line
+
+
     def ComputeBurgerOnLineDraft(self, rcut_burger : float, 
                                  nye_tensor : np.ndarray, 
                                  descriptor : np.ndarray = None) -> None : 
@@ -492,20 +559,20 @@ class DislocationObject :
         """
         for _, cluster in self.dislocations.items():
             for id_line in cluster.local_lines.keys() : 
-                center_line = cluster.local_lines[id_line].center
-                id_at2keep = [id for id, atom in enumerate(self.system) if np.linalg.norm(atom.position - center_line) < rcut_burger]
-                if len(id_at2keep) == 0 : 
-                    raise ValueError(f'Number of atom in rcut for id line {id_line} is zero !')
+                id_at2keep = self.FindAtomsLocalLines(cluster.local_lines[id_line], rcut_burger)
 
                 weights = np.ones(len(id_at2keep))
                 if descriptor is not None :
                     subset_descriptor = descriptor[id_at2keep , :]
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])   
 
-                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0 )
-                sub_convex_hull = ConvexHull(self.system.positions[id_at2keep])
+                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights*self.voro_vol[id_at2keep], axis=0 )
+                sub_convex_hull = np.sum(self.voro_vol[id_at2keep])
 
-                burger_vector_line = nye_tensor_id_line@cluster.local_lines[id_line].local_normal*sub_convex_hull.volume
+                local_norm = cluster.local_lines[id_line].norm_normal
+                scaling_factor = min(1.0, self.neigh_factor/len(id_at2keep))
+                
+                burger_vector_line = scaling_factor*cluster.local_lines[id_line].local_normal@nye_tensor_id_line*sub_convex_hull/(0.5*local_norm)
                 cluster.local_lines[id_line].update_burger(burger_vector_line)
 
         return 
@@ -528,26 +595,29 @@ class DislocationObject :
 
         """
         
-        for _, cluster in self.dislocations.items():
+        for id_c, cluster in self.dislocations.items():
             for id_line in cluster.smooth_local_lines.keys() : 
-                center_line = cluster.smooth_local_lines[id_line].center
-                id_at2keep = [id for id, atom in enumerate(self.system) if np.linalg.norm(atom.position - center_line) < rcut_burger ]
-                #id_at2keep = [id for id, atom in enumerate(self.system) if np.sum((atom.position - center_line)**2 ) < rcut_burger**2 ]
+                id_at2keep = self.FindAtomsLocalLines(cluster.smooth_local_lines[id_line], rcut_burger)
                 
-                if len(id_at2keep) < 4 : 
-                    raise ValueError(f'''Number of atom in rcut for id line {id_line} < 5 ({len(id_at2keep)}) 
-                                       rcut_bruger has to be increased !''')
-
                 weights = np.ones(len(id_at2keep))
                 if descriptor is not None :
                     subset_descriptor = descriptor[id_at2keep , :]
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])   
 
-                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights, axis=0 )
-                sub_convex_hull = ConvexHull(self.system.positions[id_at2keep])
+                # averaging depending on the local Voroinoi volume
+                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights*self.voro_vol[id_at2keep], axis=0 )
+                sub_convex_hull = np.sum(self.voro_vol[id_at2keep])
 
-                burger_vector_line = nye_tensor_id_line@cluster.smooth_local_lines[id_line].local_normal*sub_convex_hull.volume
-                print(burger_vector_line)
+                # computing burger vector from Nye tensor
+                local_norm = cluster.smooth_local_lines[id_line].norm_normal
+                scaling_factor = min(1.0, self.neigh_factor/(len(id_at2keep)))
+                burger_vector_line = scaling_factor*cluster.smooth_local_lines[id_line].local_normal@nye_tensor_id_line*sub_convex_hull/(0.5*local_norm)
+
+                #debug
+                #print(burger_vector_line,'b')
+                #print(local_tensor,'nye')
+                #print(cluster.smooth_local_lines[id_line].local_normal,id_c,id_at2keep,local_norm,'local')
+                #print()
                 cluster.smooth_local_lines[id_line].update_burger(burger_vector_line)
         return 
 
