@@ -6,15 +6,24 @@ from ase import Atoms, Atom
 from ..metrics import MCDModel, GMMModel, PCAModel
 from ..mld import DBManager
 
+from ..tools import timeit
+
 import scipy.stats
 import matplotlib
 matplotlib.use('Agg')
 
-from typing import List, Dict
+from typing import List, Dict, TypedDict
 import matplotlib.pyplot as plt
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
+
+class Bin(TypedDict) : 
+    min : float
+    max : float
+    list_norm : List[float]
+    list_id : List[int]
+    density : float
 
 ####################################################
 ## SQUARE NORM DESCRIPTORS CLASS
@@ -38,45 +47,49 @@ class NormDescriptorHistogram :
         if nb_bin is None :
             nb_bin = int(0.05*len(list_atoms))
 
-        self.list_atoms = list_atoms
+        self.descriptors = np.concatenate([ats.get_array('milady-descriptors') for ats in list_atoms], axis=0)
         self.nb_bin = nb_bin
-        list_norm = [np.linalg.norm(at.get_array('milady-descriptors'))**2 for at in self.list_atoms]
-        self.bin = {}
+        self.id_list = np.array([i for i in range(self.descriptors.shape[0])])
 
-        self.min_dis, self.max_dis = np.amin(list_norm), np.amax(list_norm)
+        self.array_norm_square = np.sum(self.descriptors**2, axis=1)
+        self.bin : Dict[int, Bin] = {}
+
+        self.min_dis, self.max_dis = np.amin(self.array_norm_square), np.amax(self.array_norm_square)
         increment = (self.max_dis - self.min_dis)/nb_bin
         #here is the histogram generation procedure
+        
         for k in range(nb_bin) : 
             self.bin[k] = {'min':self.min_dis+k*increment,
                            'max':self.min_dis+(k+1)*increment,
                            'list_norm':[],
-                           'list_atoms':[],
+                           'list_id':[],
                            'density':None}
 
         self.fill_histogram()
 
     def fill_histogram(self) :
         """Fill the histogram based square norm of descriptors"""
-        for at in self.list_atoms : 
-            norm_desc = np.linalg.norm(at.get_array('milady-descriptors'))**2
-            for id_bin in self.bin.keys() : 
-                if norm_desc > self.bin[id_bin]['min'] and norm_desc <= self.bin[id_bin]['max'] : 
-                    self.bin[id_bin]['list_atoms'].append(at)
-                    self.bin[id_bin]['list_norm'].append(norm_desc)
-                    break
+        for _, bin_data in self.bin.items() : 
+            mask_bin_inf = self.array_norm_square > bin_data['min']
+            mask_bin_supp = self.array_norm_square <= bin_data['max']
+            
+            mask_bin = mask_bin_inf & mask_bin_supp
+            
+            bin_data['list_norm'] += self.array_norm_square[mask_bin].tolist()
+            bin_data['list_id'] += self.id_list[mask_bin].tolist()
 
         # density correction for random choice
         sum_density = 0
-        for id_bin in self.bin.keys() : 
-            random.shuffle(self.bin[id_bin]['list_atoms'])
-            self.bin[id_bin]['density'] = float(len(self.bin[id_bin]['list_norm']))/float(len(self.list_atoms))
-            sum_density += float(len(self.bin[id_bin]['list_norm']))/float(len(self.list_atoms))
+        for i, data_bin in self.bin.items() : 
+            random.shuffle(data_bin['list_id'])
+            data_bin['density'] = float(len(data_bin['list_norm']))/float(self.descriptors.shape[0])
+            sum_density += data_bin['density']
         
         miss_density = (1.0-sum_density)/(self.nb_bin)
-        for id_bin in self.bin.keys() : 
-            self.bin[id_bin]['density'] += miss_density
+        for _, data_bin in self.bin.items() : 
+            data_bin['density'] += miss_density
 
-    def histogram_sample(self,nb_selected : int) -> List[Atoms] :
+    def histogram_sample(self,nb_selected : int) -> np.ndarray :
         """Histogram selection based on random choice function
         
         Parameters
@@ -88,18 +101,18 @@ class NormDescriptorHistogram :
         Returns:
         --------
 
-        List[Atoms]
-            Selected Atoms objects
+        np.ndarray
+            Selected descriptors to fit data envelop
         """
-        list_atoms_selected = []
-        selection_bin = np.random.choice([k for k in range(self.nb_bin)], nb_selected, p=[self.bin[id_bin]['density'] for id_bin in self.bin.keys()])
+        list_id_selected = []
+        selection_bin = np.random.choice([k for k in range(self.nb_bin)], nb_selected, p=[data_bin['density'] for _, data_bin in self.bin.items()])
         for sl_bin in selection_bin : 
-            if len(self.bin[sl_bin]['list_atoms']) > 0 :
-                list_atoms_selected.append(self.bin[sl_bin]['list_atoms'][-1])
-                self.bin[sl_bin]['list_atoms'].pop(-1)
+            if len(self.bin[sl_bin]['list_id']) > 0 :
+                list_id_selected.append(self.bin[sl_bin]['list_id'][-1])
+                self.bin[sl_bin]['list_id'].pop(-1)
 
-        print('... Effective number of selected atoms is {:5d}/{:5d} ...'.format(len(list_atoms_selected),nb_selected))
-        return list_atoms_selected
+        print('... Effective number of selected atoms is {:5d}/{:5d} ...'.format(len(list_id_selected),nb_selected))
+        return self.descriptors[list_id_selected]
 
 #######################################################
 ## MCD ANALYSIS OBJECT
@@ -112,26 +125,28 @@ class MCDAnalysisObject :
         self.gmm_model = GMMModel()
         self.pca_model = PCAModel()
 
-        def fill_dictionnary(at : Atom, id_at : int, descriptors : np.ndarray, dic : Dict[str,List[Atoms]]) -> None : 
-            atoms = Atoms([at])          
-            atoms.set_array('milady-descriptors',descriptors[id_at,:].reshape(1,descriptors.shape[1]), dtype=float)
-            dic[at.symbol] += [atoms]
+        def fill_dictionnary_fast(ats : Atoms, dic : Dict[str,List[Atoms]]) -> None : 
+            symbols = ats.get_chemical_symbols()
+            for sym in dic.keys() : 
+                mask_sym = list(map( lambda b : b == sym, symbols))
+                ats_sym = ats[mask_sym]
+
+                dic[sym] += [ats_sym]
             return 
 
         for key in dbmodel.model_init_dic.keys() : 
-            if key[0:6] in self.dic_class.keys() : 
-                descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
-                [ fill_dictionnary(at, id_at, descriptors, self.dic_class[key[0:6]]) \
-                 for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
+            key_dic = key[0:6]
+            if key_dic in self.dic_class.keys() : 
+                fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'],
+                                      self.dic_class[key_dic])
 
             else : 
                 species = dbmodel.model_init_dic[key]['atoms'].symbols.species()
                 dic_species : Dict[str,List[Atoms]] = {sp:[] for sp in species}
-                descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
-                [ fill_dictionnary(at, id_at, descriptors, dic_species) \
-                 for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
+                fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'],
+                                      dic_species)
 
-                self.dic_class[key[0:6]] = dic_species
+                self.dic_class[key_dic] = dic_species
 
     def _get_all_atoms_species(self, species : str) -> List[Atoms] : 
         """Create the full list of Atoms for a given species
@@ -163,19 +178,20 @@ class MCDAnalysisObject :
         print()
         print('... Starting histogram procedure ...')
         histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin)
-        list_atom_species = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
+        array_desc_selected = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
+        print(array_desc_selected.shape)
         print('... Histogram selection is done ...')
         print()
 
         print('... Starting MCD fit for {:} atoms ...'.format(species))
-        self.mcd_model._fit_mcd_model(list_atom_species, species, contamination=contamination)
+        self.mcd_model._fit_mcd_model(array_desc_selected, species, contamination=contamination)
         #self._fit_mcd_model(list_atom_species, species, contamination=contamination)
         print('... MCD envelop is fitted ...')
         updated_atoms = self.mcd_model._get_mcd_distance(list_atom_species,species)
 
         #mcd distribution 
         fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14,6))
-        list_mcd = [at.get_array('mcd-distance').flatten()[0] for at in updated_atoms]
+        list_mcd = np.concatenate([at.get_array('mcd-distance') for at in updated_atoms], axis=0)
         n, _, patches = axis[0].hist(list_mcd,density=True,bins=50,alpha=0.7)
         for i in range(len(patches)):
             patches[i].set_facecolor(plt.cm.viridis(n[i]/max(n)))        
@@ -223,19 +239,19 @@ class MCDAnalysisObject :
         print()
         print('... Starting histogram procedure ...')
         histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin_histo)
-        list_atom_species = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
+        array_desc_selected = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
         print('... Histogram selection is done ...')
         print()
 
         print('... Starting GMM fit for {:} atoms ...'.format(species))
-        self.gmm_model._fit_gaussian_mixture_model(list_atom_species, species, dict_gaussian=dict_gaussian)
+        self.gmm_model._fit_gaussian_mixture_model(array_desc_selected, species, dict_gaussian=dict_gaussian)
         print('... GMM envelop is fitted ...')
         updated_atoms = self.gmm_model._get_gmm_distance(list_atom_species,species)
 
         fig, axis = plt.subplots(nrows=1, ncols=dict_gaussian['n_components'], figsize=(14,6))
         
         #mcd distribution 
-        list_gmm = np.array([at.get_array('gmm-distance').flatten() for at in updated_atoms])
+        list_gmm = np.concatenate([at.get_array('gmm-distance') for at in updated_atoms], axis=0)
         self.gmm_model._fit_distribution(list_gmm, species)
 
         for k in range(dict_gaussian['n_components']) : 

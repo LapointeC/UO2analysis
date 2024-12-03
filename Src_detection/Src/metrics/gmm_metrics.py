@@ -18,7 +18,7 @@ class GMMModel :
         else : 
             self.models : Dict[str, GMM] = {}
 
-    def _fit_gaussian_mixture_model(self, list_atoms : List[Atoms], species : str, 
+    def _fit_gaussian_mixture_model(self, desc_selected : np.ndarray, species : str, 
                                     dict_gaussian : dict = {'n_components':2,
                                                             'covariance_type':'full',
                                                             'init_params':'kmeans', 
@@ -50,8 +50,8 @@ class GMMModel :
                                                           weight_concentration_prior_type=dict_gaussian['weight_concentration_prior_type'],
                                                           weight_concentration_prior=dict_gaussian['weight_concentration_prior'],
                                                           n_init=10)
-        descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
-        self.models[species]['gmm'].fit(descriptors_array)
+        self.models[species]['gmm'].fit(desc_selected)
+        self.n_components = dict_gaussian['n_components']
         return 
     
     def _fit_distribution(self, gmm_distances : np.ndarray, species : str) -> None :
@@ -71,7 +71,7 @@ class GMMModel :
         for k in range(gmm_distances.shape[1]) : 
             mask = k == np.argmin(gmm_distances, axis = 1)
             self.models[species]['distribution'] += [KernelDensity(kernel='gaussian')]
-            self.models[species]['distribution'][-1].fit( gmm_distances[:,k][mask] )
+            self.models[species]['distribution'][-1].fit( gmm_distances[:,k][mask].reshape(-1,1) )
         return 
     
     def _predict_probability(self, gmm_distances : np.ndarray, species : str) -> np.ndarray : 
@@ -125,10 +125,12 @@ class GMMModel :
         
         def mahalanobis_gmm(model : BayesianGaussianMixture, X : np.ndarray) -> np.ndarray : 
             mean_gmm = model.means_
-            invcov_gmm = model.precisions_cholesky_
+            invcov_gmm = model.precisions_ 
             array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
+
             for i in range(array_distance.shape[1]):
-                array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
+                array_distance[:,i] = np.diag(((X-mean_gmm[i,:])@invcov_gmm[i,:,:])@(X-mean_gmm[i,:]).T)
+                array_distance[:,i] = np.where(array_distance[:,i] <= 0.0, 0.0, np.sqrt(array_distance[:,i]))
             return array_distance
 
         def local_setting_gmm(atoms : Atoms) -> None : 
@@ -163,7 +165,8 @@ class GMMModel :
         invcov_gmm = self.models[species]['gmm'].precisions_
         array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
         for i in range(array_distance.shape[1]):
-            array_distance[:,i] = np.sqrt((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
+                array_distance[:,i] = np.diag((X-mean_gmm[i,:])@invcov_gmm[i,:,:]@(X-mean_gmm[i,:]).T)
+                array_distance[:,i] = np.where(array_distance[:,i] < 0.0, 0.0, np.sqrt(array_distance[:,i]))
         return array_distance
 
     def _write_pkl(self, path_writing : os.PathLike[str] = './mcd.pkl') -> None : 

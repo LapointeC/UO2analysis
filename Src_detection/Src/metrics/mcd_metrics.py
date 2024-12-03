@@ -20,15 +20,14 @@ class MCDModel :
         else : 
             self.models : Dict[str, MCD] = {}
     
-    def _fit_mcd_model(self, list_atoms : List[Atoms], species : str, contamination : float = 0.05) -> None : 
+    def _fit_mcd_model(self, desc_selected : np.ndarray, species : str, contamination : float = 0.05) -> None : 
         """Build the mcd model for a given species
         
         Parameters
         ----------
 
-        list_atoms : List[Atoms]
-            List of Atoms objects to perform MCD analysis. Each Atoms object containing only 1 Atom with its 
-            associated properties ...
+        desc_selected : np.ndarray 
+            Selected descriptor array to perform mcd selection
 
         species : str
             Selected species 
@@ -40,8 +39,7 @@ class MCDModel :
         self.models[species] = {'mcd':None,
                                 'distribution':None}
         self.models[species]['mcd'] = MinCovDet(support_fraction=1.0-contamination)
-        descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
-        self.models[species]['mcd'].fit(descriptors_array)
+        self.models[species]['mcd'].fit(desc_selected)
         
         return 
     

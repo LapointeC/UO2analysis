@@ -20,7 +20,7 @@ class PCAModel :
         """Build PCA model from data"""
         self.models[species] = {'PCA':None}
         self.models[species]['PCA'] = PCA(n_components=n_component)
-        descriptors_array = np.array([ atoms.get_array('milady-descriptors').flatten() for atoms in list_atoms ])
+        descriptors_array = np.concatenate([ atoms.get_array('milady-descriptors') for atoms in list_atoms ], axis=0)
         return self.models[species]['PCA'].fit_transform(descriptors_array)
     
     def _write_pkl(self, path_writing : os.PathLike[str] = './mcd.pkl') -> None : 

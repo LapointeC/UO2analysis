@@ -8,12 +8,11 @@ from typing import Dict, List, Any, Tuple
 from ..metrics import MCDModel, GMMModel, PCAModel, LogisticRegressor
 from ..clusters import Cluster, ClusterDislo, DislocationObject, reference_structure
 from ..mld import DBManager
-from ..tools import timeit
+from ..tools import timeit, build_extended_neigh_
 
 from ovito.io.ase import ase_to_ovito
 from ovito.modifiers import VoronoiAnalysisModifier, DislocationAnalysisModifier, CoordinationAnalysisModifier
 from ovito.pipeline import StaticSource, Pipeline
-
 
 #######################################################
 ## Dfct analysis object
@@ -27,20 +26,28 @@ class DfctAnalysisObject :
         self.pca_model = PCAModel()
         self.logistic_model = LogisticRegressor() 
 
-        self.dfct : Dict[str, Dict[str, Cluster | ClusterDislo]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
+        self.dfct : Dict[str, Dict[int, Cluster | ClusterDislo]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
         self.mean_atomic_volume = None 
 
-        def fill_dictionnary(key : str, at : Atom, id_at : int, descriptors : np.ndarray, extended_properties : List[str], dic : Dict[str,List[Atoms]]) -> None : 
-            """TODO write doc"""
-            atoms = Atoms([at])          
-            atoms.set_array('milady-descriptors',descriptors[id_at,:].reshape(1,descriptors.shape[1]), dtype=float)
-            if extended_properties is not None : 
-                for property in extended_properties : 
-                    property_value = dbmodel.model_init_dic[key]['atoms'].get_array(property)[id_at]
-                    atoms.set_array(property,
-                                    property_value.reshape(1,),
-                                    dtype=float)
-                dic[at.symbol] += [atoms]
+        #def fill_dictionnary(key : str, at : Atom, id_at : int, descriptors : np.ndarray, extended_properties : List[str], dic : Dict[str,List[Atoms]]) -> None : 
+        #    """TODO write doc"""
+        #    atoms = Atoms([at])          
+        #    atoms.set_array('milady-descriptors',descriptors[id_at,:].reshape(1,descriptors.shape[1]), dtype=float)
+        #    if extended_properties is not None : 
+        #        for property in extended_properties : 
+        #            property_value = dbmodel.model_init_dic[key]['atoms'].get_array(property)[id_at]
+        #            atoms.set_array(property,
+        #                            property_value.reshape(1,),
+        #                            dtype=float)
+        #        dic[at.symbol] += [atoms]
+        #    return 
+
+        def fill_dictionnary_fast(ats : Atoms, dic : Dict[str,List[Atoms]]) :
+            symbols = ats.get_chemical_symbols()
+            for sym in dic.keys() : 
+                mask = list(map( lambda b : b == sym, symbols))
+                ats2keep = ats[mask]
+                dic[sym] += [ats2keep]
             return 
 
         # sanity check !
@@ -50,7 +57,8 @@ class DfctAnalysisObject :
                 raise NotImplementedError('{} : this property is not yet implemented'.format(prop))
 
         for key in dbmodel.model_init_dic.keys() : 
-            if key[0:6] in self.dic_class.keys() : 
+            key_dic = key[0:6]
+            if key_dic in self.dic_class.keys() : 
                 #voronoi analysis
                 if 'atomic-volume' or 'coordination' in extended_properties : 
                     dbmodel.model_init_dic[key]['atoms'] = self.compute_Voronoi(dbmodel.model_init_dic[key]['atoms'])
@@ -59,10 +67,11 @@ class DfctAnalysisObject :
                     dic_nb_dfct = kwargs['dic_nb_dfct']
                     dbmodel.model_init_dic[key]['atoms'] = self._labeling_outlier_atoms(dbmodel.model_init_dic[key]['atoms'],dic_nb_dfct)
 
-                descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
-                [ fill_dictionnary(key, at, id_at, descriptors, extended_properties, self.dic_class[key[0:6]]) \
-                 for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
-                
+                #descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
+                #[ fill_dictionnary(key, at, id_at, descriptors, extended_properties, self.dic_class[key[0:6]]) \
+                # for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
+                fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'], self.dic_class[key_dic])
+
             else : 
                 # voronoi analysis
                 if 'atomic-volume' or 'coordination' in extended_properties : 
@@ -74,11 +83,12 @@ class DfctAnalysisObject :
 
                 species = dbmodel.model_init_dic[key]['atoms'].symbols.species()
                 dic_species : Dict[str,List[Atoms]] = {sp:[] for sp in species}
-                descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
-                [ fill_dictionnary(key, at, id_at, descriptors, extended_properties, dic_species) \
-                 for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
+                #descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
+                #[ fill_dictionnary(key, at, id_at, descriptors, extended_properties, dic_species) \
+                # for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
 
-                self.dic_class[key[0:6]] = dic_species
+                fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'], dic_species)
+                self.dic_class[key_dic] = dic_species
         return
 
     def compute_Voronoi(self, atoms : Atoms) -> Atoms : 
@@ -98,6 +108,7 @@ class DfctAnalysisObject :
         """
         ovito_config = ase_to_ovito(atoms)
         pipeline = Pipeline(source = StaticSource(data = ovito_config))
+        
         voro = VoronoiAnalysisModifier(compute_indices = True,
                                        use_radii = False,
                                        edge_threshold = 0.1)
@@ -376,15 +387,26 @@ class DfctAnalysisObject :
         """
 
         descriptor = atoms.get_array('milady-descriptors')
-        list_mcd = [ np.sqrt(self.mcd_model[at.symbol]['mcd'].mahalanobis(descriptor[id_at,:].reshape(1,descriptor.shape[1]))) for id_at, at in enumerate(atoms)  ]
-        list_proba = [ self.mcd_model[at.symbol]['distribution'].score(list_mcd[id_at]) for id_at, at in enumerate(atoms)]
+        
+        full_species = atoms.get_chemical_symbols()
+
+        species = np.unique(full_species)
+        full_array_mcd = np.zeros(descriptor.shape[0])
+        full_array_proba = np.zeros(descriptor.shape[0])
+        for s in species : 
+            mask_s = list(map( lambda b : b == s, full_species))
+            mcd_s = self.mcd_model.models[s]['mcd'].mahalanobis(descriptor[mask_s]) 
+            proba_s = self.mcd_model.models[s]['distribution'].score(mcd_s)
+
+            full_array_mcd[mask_s] = mcd_s
+            full_array_proba[mask_s] = proba_s
 
         atoms.set_array('mcd-distance',
-                        np.array(list_mcd).reshape(len(list_mcd),),
+                        np.array(full_array_mcd).reshape(len(full_array_mcd),),
                         dtype=float)
         atoms.set_array('probabilty',
-                        np.array(list_proba).reshape(len(list_proba),),
-                        dtype=float)
+                        np.array(full_array_proba).reshape(len(full_array_proba),),
+                        dtype=float)    
 
         return atoms
 
@@ -398,6 +420,29 @@ class DfctAnalysisObject :
             Atoms object containing a given configuration
         """
 
+        descriptor = atoms.get_array('milady-descriptors')
+        
+        full_species = atoms.get_chemical_symbols()
+
+        species = np.unique(full_species)
+        full_array_gmmd = np.zeros(descriptor.shape[0])
+        full_array_proba = np.zeros((self.gmm_model.n_components,descriptor.shape[0]))
+        for s in species : 
+            mask_s = list(map( lambda b : b == s, full_species))
+            gmmd_s = self.gmm_model.mahalanobis_gmm(s, descriptor[mask_s])
+            proba_s = self.gmm_model._predict_probability(gmmd_s, s)
+
+            full_array_gmmd[mask_s] = gmmd_s
+            full_array_proba[mask_s] = proba_s
+
+        atoms.set_array('gmm-distance',
+                        np.array(gmmd_s),
+                        dtype=float)
+        atoms.set_array('probability',                        
+                        np.array(full_array_proba),
+                        dtype=float)
+
+        """
         list_gmmd = []
         list_proba = []
         descriptor = atoms.get_array('milady-descriptors')
@@ -419,7 +464,7 @@ class DfctAnalysisObject :
                         dtype=float)
         atoms.set_array('probability',                        
                         np.array(list_proba).reshape(len(list_proba),1),
-                        dtype=float)
+                        dtype=float)"""
         return atoms
     
     #@timeit
@@ -592,15 +637,16 @@ class DfctAnalysisObject :
 
         """
         if self.dfct[key_dfct] == {} : 
-            self.dfct[key_dfct]['0'] = Cluster(atom, rcut, array_property=array_property)
+            self.dfct[key_dfct][0] = Cluster(atom, rcut, array_property=array_property)
         
         else : 
             key_closest = np.argmin([np.linalg.norm( atom.position - cluster.center) for _, cluster in self.dfct[key_dfct].items()])
+            key_closest = [key for key in self.dfct[key_dfct]][key_closest]
             if self.dfct[key_dfct][key_closest].get_elliptic_distance(atom) < 1.5 :
                 self.dfct[key_dfct][key_closest].append(atom, array_property=array_property, elliptic = elliptic)
             
             else : 
-                next_index = str(max([int(key) for key in self.dfct[key_dfct].keys()]) + 1)
+                next_index = max([int(key) for key in self.dfct[key_dfct].keys()]) + 1
                 self.dfct[key_dfct][next_index] = Cluster(atom, rcut, array_property=array_property) 
 
     def _aggregate_cluster(c1 : Cluster, c2 : Cluster) -> Cluster : 
@@ -644,9 +690,9 @@ class DfctAnalysisObject :
         Dict[str,Cluster]
             Aggreagated dictionnary of ```Cluster```
         """
-        updated_dict_cluster : Dict[str,Cluster] = {'0':dic_cluster['0']}
+        updated_dict_cluster : Dict[int,Cluster] = {'0':dic_cluster['0']}
         for key, cluster in dic_cluster.items() : 
-            if key == '0' : 
+            if key == 0 : 
                 continue
             else :
                 composite_idx_distance = [ [np.linalg.norm(cluster.center - c.center),idx] for idx, c in updated_dict_cluster.items()] 
@@ -763,24 +809,8 @@ class DfctAnalysisObject :
         # build the mask
         mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume < mean_atomic_volume)
         idx2do = np.where(mask)[0]
-        dislo_system : Atoms = atoms[idx2do]
 
-        # Get the positions of the selected indices
-        r_ids = atoms.positions[idx2do, :]
-
-        # Calculate squared distances to avoid unnecessary square root computations
-        dist_squared = np.sum((atoms.positions[:, np.newaxis, :] - r_ids[np.newaxis, :, :]) ** 2, axis=2)
-
-        # Create boolean masks for the two cutoff distances
-        ext_mask = dist_squared < rcut_extended ** 2
-        full_mask = dist_squared < rcut_full ** 2
-
-        # Find unique indices within the extended and full cutoff ranges
-        idx_extended = np.unique(np.where(ext_mask)[0])
-        idx_full = np.unique(np.where(full_mask)[0])
-
-        extended_system = atoms[idx_extended]
-        full_system = atoms[idx_full]
+        dislo_system, extended_system, full_system = build_extended_neigh_(atoms, idx2do, rcut_extended, rcut_full)
 
         if reference_structure is None :
             reference_structure = self.StructureEstimator(atoms, rcut = 5.0, nb_bin = 200)

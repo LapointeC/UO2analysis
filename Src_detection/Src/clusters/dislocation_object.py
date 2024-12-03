@@ -207,7 +207,6 @@ class DislocationObject :
         idx_dislo = 0
         barycenter = np.mean(self.system.positions, axis=0)
         starting_id = np.argmax( np.linalg.norm(self.system.positions - barycenter, axis=1)  )
-        #starting_id = np.argmax( np.sum((self.system.positions - barycenter)**2, axis=1)  )
         
         self.starting_point_line = starting_id
         self.dislocations[idx_dislo]  = ClusterDislo(LocalLine( self.system[starting_id].position, self.system[starting_id].symbol ), starting_id, rcut_cluster)  
@@ -326,12 +325,9 @@ class DislocationObject :
                 else :
                     continue
         
-        #print(dic_aggre)
-
         # reaggreate ...
         dic_aggre = merge_dict_(dic_aggre)
         #print(dic_aggre)
-        #whole2delete = []
 
         for key_id, list_to_aggr in dic_aggre.items() : 
             for id_to_aggr in list_to_aggr : 
@@ -355,7 +351,6 @@ class DislocationObject :
         Starting point of each cluster is chosen to be the farest of the center of the cluster"""
         for _, cluster in self.dislocations.items(): 
             composite_id_distance = [(idx, np.linalg.norm(line.center - cluster.center)) for idx, line in cluster.local_lines.items() ]
-            #composite_id_distance = [(idx, np.sum((line.center - cluster.center)**2 )) for idx, line in cluster.local_lines.items() ]
             max_id, _ =  sorted(composite_id_distance, key=lambda x: x[1], reverse=True)[0]
             cluster.starting_point = max_id
         return 
@@ -477,41 +472,45 @@ class DislocationObject :
         
         barycenter = []
         for _, cluster in self.dislocations.items():
-            
-            # debug
             barycenter_loc = Atoms()
 
             #build the smoothed local line !INDEXES ARE CHANGED AT THIS POINT!
             for k in range(len(cluster.order_line) - nb_averaging_window) : 
                 species = cluster.local_lines[cluster.order_line[k]].species
-                all_window_positions = np.array([ cluster.local_lines[cluster.order_line[i]].center for i in range(k,k+nb_averaging_window) ])
+                new_k = int(0.5*(2*k+nb_averaging_window)) if nb_averaging_window%2 == 0 else int(0.5*(2*k+nb_averaging_window)) + 1
+                all_window_positions = np.array([ cluster.local_lines[cluster.order_line[i]].center for i in range(k+1,k+1+nb_averaging_window) ])
                 av_localline_obj = LocalLine( np.mean(all_window_positions, axis=0), species)
                 
                 #debug
-                barycenter_loc.append(Atom( symbol=species, position= np.mean(all_window_positions, axis=0)))
+                barycenter_loc.append(Atom(symbol=species, position= np.mean(all_window_positions, axis=0)))
+         
                 #smooth line is updated
-                cluster.smooth_local_lines[k] = av_localline_obj
-                cluster.smooth_order_line.append( cluster.order_line[int(0.5*(2*k+nb_averaging_window))] )
+                cluster.smooth_local_lines[new_k] = av_localline_obj
+                cluster.smooth_order_line.append( cluster.order_line[new_k] )
+
+            #tmp = [key for key, val in cluster.smooth_local_lines.items()]
+            #tmp.sort()
+            #print(tmp)
 
             #time to update every normal ...
-            for k in range(len(cluster.smooth_local_lines) -1 ) :
+            shift_av = int(0.5*nb_averaging_window) if nb_averaging_window%2 == 0 else int(0.5*nb_averaging_window) + 1
+            for k in range(shift_av, len(cluster.smooth_local_lines) + shift_av - 1) :
                 local_smooth_normal = (cluster.smooth_local_lines[k+1].center - cluster.smooth_local_lines[k].center)/np.linalg.norm(cluster.smooth_local_lines[k+1].center - cluster.smooth_local_lines[k].center)
                 cluster.smooth_local_lines[k].update_normal( local_smooth_normal )
                 cluster.smooth_local_lines[k].update_norm_normal(np.linalg.norm(cluster.smooth_local_lines[k+1].center - cluster.smooth_local_lines[k].center))
                 cluster.smooth_local_lines[k].update_next(k+1)
             
             #last one to update ! 
-            previous_normal = cluster.smooth_local_lines[len(cluster.smooth_local_lines)-2].local_normal
-            previous_norm = cluster.smooth_local_lines[len(cluster.smooth_local_lines)-2].norm_normal
-            cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_normal( previous_normal )
-            cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_norm_normal( previous_norm )
-            cluster.smooth_local_lines[len(cluster.smooth_local_lines)-1].update_next(None)
-
+            previous_normal = cluster.smooth_local_lines[len(cluster.smooth_local_lines) -2 + shift_av].local_normal
+            previous_norm = cluster.smooth_local_lines[len(cluster.smooth_local_lines) -2 + shift_av].norm_normal
+            cluster.smooth_local_lines[len(cluster.smooth_local_lines) -1 + shift_av].update_normal( previous_normal )
+            cluster.smooth_local_lines[len(cluster.smooth_local_lines) -1 + shift_av].update_norm_normal( previous_norm )
+            cluster.smooth_local_lines[len(cluster.smooth_local_lines) -1 + shift_av].update_next(None)
             barycenter.append(barycenter_loc)
 
         return barycenter
 
-    def FindAtomsLocalLines(self, local_line : LocalLine, rcut_burger : float) -> List[int] : 
+    def FindAtomsLocalLines(self, local_line : LocalLine, rcut_burger : float) -> Tuple[List[int], float] : 
         """Build subset of index of ```Atoms``` which are part of a given ```LocalLine```
         
         Parameters
@@ -529,13 +528,30 @@ class DislocationObject :
         List[int]
             Subset of indexes in ```Atoms``` system
 
+        float 
+            Maximum projected distance on local line for selected atoms
         """
         center_line = local_line.center
         local_direction = local_line.local_normal
         local_norm = local_line.norm_normal
-        return [id for id, atom in enumerate(self.system) 
+
+        id2keep = [id for id, atom in enumerate(self.system) 
                     if np.sum((atom.position - center_line)**2) < rcut_burger**2 # projection around burger
                     and np.abs(np.dot(atom.position - center_line,local_direction)) < 0.5*local_norm ] # projection on line
+        
+        pos_local = self.system[id2keep].positions
+
+        mask = np.triu(np.ones((pos_local.shape[0], pos_local.shape[0]), dtype=bool), k=1)
+        # Use broadcasting to calculate all pairwise differences
+        differences = pos_local[:, np.newaxis, :] - pos_local[np.newaxis, :, :]
+        # Apply the mask and reshape the result
+        array_rij = differences[mask]
+        if len(array_rij) == 0 : 
+            max_distance = 0.0
+        else :
+            max_distance = np.amax(np.abs(array_rij@local_direction))
+        
+        return id2keep, max_distance
 
 
     def ComputeBurgerOnLineDraft(self, rcut_burger : float, 
@@ -559,7 +575,7 @@ class DislocationObject :
         """
         for _, cluster in self.dislocations.items():
             for id_line in cluster.local_lines.keys() : 
-                id_at2keep = self.FindAtomsLocalLines(cluster.local_lines[id_line], rcut_burger)
+                id_at2keep, _ = self.FindAtomsLocalLines(cluster.local_lines[id_line], rcut_burger)
 
                 weights = np.ones(len(id_at2keep))
                 if descriptor is not None :
@@ -597,26 +613,32 @@ class DislocationObject :
         
         for id_c, cluster in self.dislocations.items():
             for id_line in cluster.smooth_local_lines.keys() : 
-                id_at2keep = self.FindAtomsLocalLines(cluster.smooth_local_lines[id_line], rcut_burger)
+                id_at2keep, max_d = self.FindAtomsLocalLines(cluster.smooth_local_lines[id_line], rcut_burger)
                 
                 weights = np.ones(len(id_at2keep))
                 if descriptor is not None :
                     subset_descriptor = descriptor[id_at2keep , :]
                     weights = np.array([ np.exp(desc)/np.exp(np.sum(subset_descriptor,axis=0)) for desc in subset_descriptor ])   
 
-                # averaging depending on the local Voroinoi volume
-                nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights*self.voro_vol[id_at2keep], axis=0 )
-                sub_convex_hull = np.sum(self.voro_vol[id_at2keep])
+                # averaging depending on the local Voronoi volume
+                try : 
+                    nye_tensor_id_line = np.average( nye_tensor[id_at2keep], weights=weights*self.voro_vol[id_at2keep], axis=0 ) 
+                    sub_convex_hull = np.sum(self.voro_vol[id_at2keep])
 
-                # computing burger vector from Nye tensor
-                local_norm = cluster.smooth_local_lines[id_line].norm_normal
-                scaling_factor = min(1.0, self.neigh_factor/(len(id_at2keep)))
-                burger_vector_line = scaling_factor*cluster.smooth_local_lines[id_line].local_normal@nye_tensor_id_line*sub_convex_hull/(0.5*local_norm)
 
+                    # computing burger vector from Nye tensor
+                    local_norm = cluster.smooth_local_lines[id_line].norm_normal
+                    scaling_factor = min(1.0, self.neigh_factor/(len(id_at2keep)))
+                    burger_vector_line = scaling_factor*cluster.smooth_local_lines[id_line].local_normal@nye_tensor_id_line*sub_convex_hull/(0.5*local_norm)
+
+                except : 
+                    warnings.warn(f'Something wrong with burger calculations for id_line : {id_line}')
+                    local_norm = cluster.smooth_local_lines[id_line].norm_normal
+                    burger_vector_line = np.zeros(3)
                 #debug
-                #print(burger_vector_line,'b')
+                print(burger_vector_line,'b')
                 #print(local_tensor,'nye')
-                #print(cluster.smooth_local_lines[id_line].local_normal,id_c,id_at2keep,local_norm,'local')
+                print(cluster.smooth_local_lines[id_line].local_normal,id_line,id_at2keep,local_norm,max_d,'local')
                 #print()
                 cluster.smooth_local_lines[id_line].update_burger(burger_vector_line)
         return 
