@@ -590,10 +590,10 @@ class DislocationObject :
                 
                 burger_vector_line = scaling_factor*cluster.local_lines[id_line].local_normal@nye_tensor_id_line*sub_convex_hull/(0.5*local_norm)
                 cluster.local_lines[id_line].update_burger(burger_vector_line)
-
+                
         return 
 
-    def ComputeBurgerOnLineSmooth(self, rcut_burger : float, nye_tensor : np.ndarray, descriptor : np.ndarray = None) -> None : 
+    def ComputeBurgerOnLineSmooth(self, rcut_burger : float, nye_tensor : np.ndarray, descriptor : np.ndarray = None) -> List[Atoms] : 
         """Compute the local burger vector for each point of the ```smooth_local_line```. If descriptor is not None, the 
         same reweighting procedure than in BuildOrderingLine is used to compute the local average Nye tensor
         
@@ -611,7 +611,11 @@ class DislocationObject :
 
         """
         
+        barycenter = []
         for id_c, cluster in self.dislocations.items():
+            
+            barycenter_loc = Atoms()
+            array_caracter = []
             for id_line in cluster.smooth_local_lines.keys() : 
                 id_at2keep, max_d = self.FindAtomsLocalLines(cluster.smooth_local_lines[id_line], rcut_burger)
                 
@@ -635,13 +639,21 @@ class DislocationObject :
                     warnings.warn(f'Something wrong with burger calculations for id_line : {id_line}')
                     local_norm = cluster.smooth_local_lines[id_line].norm_normal
                     burger_vector_line = np.zeros(3)
+                
                 #debug
                 print(burger_vector_line,'b')
-                #print(local_tensor,'nye')
                 print(cluster.smooth_local_lines[id_line].local_normal,id_line,id_at2keep,local_norm,max_d,'local')
-                #print()
                 cluster.smooth_local_lines[id_line].update_burger(burger_vector_line)
-        return 
+
+                # debug
+                barycenter_loc.append( Atom('H', cluster.smooth_local_lines[id_line].center))
+                array_caracter.append( np.dot(burger_vector_line, cluster.smooth_local_lines[id_line].local_normal)/(np.linalg.norm(burger_vector_line)))
+
+            array_caracter_r = np.array(np.abs(array_caracter)).reshape(-1,1)
+            barycenter_loc.set_array('caracter', array_caracter_r, dtype=float)
+            barycenter.append(barycenter_loc)
+        
+        return barycenter
 
 
     def NyeTensor(self, theta_max: float = 27) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray, np.ndarray] :

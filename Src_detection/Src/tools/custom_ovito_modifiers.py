@@ -36,7 +36,8 @@ class NaiveOvitoModifier :
     """Naive ```OvitoModifier``` for debug ..."""
     def __init__(self, dict_transparency : Dict[float, List[int]] = None, 
                  dict_color : Dict[str, List[int]] = None, 
-                 array_line : List[np.ndarray] = None) -> None : 
+                 array_line : List[np.ndarray] = None,
+                 array_caracter : List[np.ndarray] = None) -> None : 
         """Init method for ```NaiveOvitoModifier``` which just assign colors and transparency depending on ids given in dictionnaries ...
         
         Parameters
@@ -58,6 +59,7 @@ class NaiveOvitoModifier :
         self.dict_transparency = dict_transparency
         self.dict_color = dict_color
         self.array_line = array_line
+        self.array_caracter = array_caracter
 
     def ASEArrayModifier(self, dict_transparency : Dict[float, float],
                                dict_color : Dict[float, str],
@@ -130,12 +132,27 @@ class NaiveOvitoModifier :
         data.particles_.create_property('Transparency',data=self.array_transparency)
         
         if self.array_line is not None : 
-            Cmap = plt.get_cmap('autumn')
-            colors_line = [Cmap(i) for i in np.linspace(0.0,1.0,num=len(self.array_line)) ]
-            for id,line in enumerate(self.array_line) :
-                lines = data.lines.create(identifier=f'myline{id}', positions=line)
-                lines.vis.color = tuple( [ c for c in colors_line[id]][:-1] ) #colors.to_rgb('chartreuse')
-                lines.vis.width = 0.5
+            if self.array_caracter is None : 
+                Cmap = plt.get_cmap('autumn')
+                colors_line = [Cmap(i) for i in np.linspace(0.0,1.0,num=len(self.array_line)) ]
+                for id,line in enumerate(self.array_line) :
+                    lines = data.lines.create(identifier=f'myline{id}', positions=line)
+                    lines.vis.color = tuple( [ c for c in colors_line[id]][:-1] ) #colors.to_rgb('chartreuse')
+                    lines.vis.width = 0.5
+
+            else : 
+                Cmap = plt.get_cmap('seismic')
+                compt = 0 
+                for id_l, line in enumerate(self.array_line) :
+                    for id_p in range(line.shape[0] - 1) :               
+                        lines = data.lines.create(identifier=f'myline{compt}', 
+                                                  positions=line[id_p:id_p+2,:])
+                        
+
+                        compt+= 1
+                        caracter = self.array_caracter[id_l][id_p][0]
+                        lines.vis.color = tuple([ c for c in Cmap(caracter)[:-1] ])
+                        lines.vis.width = 1.2
 
 
     def BuildArraysAse(self, frame : int , data : DataCollection) -> None :
