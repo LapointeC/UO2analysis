@@ -17,6 +17,20 @@ class GMMModel :
             self._load_pkl(path_pkl)
         else : 
             self.models : Dict[str, GMM] = {}
+            self.name = 'GMM'
+
+    def _update_name(self, name : str) -> None : 
+        """Update name of ```GMMModel```
+        
+        Parameters
+        ----------
+
+        name : str
+            New name for ```GMMModel```
+        """
+        
+        self.name = name 
+        return 
 
     def _fit_gaussian_mixture_model(self, desc_selected : np.ndarray, species : str, 
                                     dict_gaussian : dict = {'n_components':2,

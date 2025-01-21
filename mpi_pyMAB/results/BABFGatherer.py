@@ -20,14 +20,19 @@ class BABFGatherer:
 
         Parameters
         ----------
-        params : PAFIParser
+        
+        params : BABFParser
             Custom or predefined PAFIParser object
+        
         nWorkers : int
             total number of PAFI workers
+        
         rank : int
             global MPI rank
+        
         ensemble_comm : MPI.Intracomm
             MPI communicator to gather ensemble data
+        
         roots : List[int]
             list of root ranks for each worker. Only collate data here
             This should be depreceated asap
@@ -51,15 +56,19 @@ class BABFGatherer:
 
         Parameters
         ----------
+        
         results : ResultsBABF
             results object to parallely update
+        
         key_data : str 
-            quantinty to reduce and then broadcast : sum_w_AxU_dl, sum_w_A...
+            quantity to reduce and then broadcast : sum_w_AxU_dl, sum_w_A...
+        
         block : bool 
             Key word for constrained BABF method
 
         Returns 
         -------
+        
         ResultsBABF
             Updated resutls object with data of all simulations
 
@@ -89,15 +98,19 @@ class BABFGatherer:
 
         Parameters
         ----------
+        
         results : ResultsBABF
             results object to parallely update
+        
         key_data : List[str] 
             list of quantities to reduce and then broadcast : sum_w_AxU_dl, sum_w_A...
+        
         block : bool 
             Key word for constrained BABF method
 
         Returns 
         -------
+        
         ResultsBABF
             Updated results object with data of all simulations
 
@@ -117,7 +130,8 @@ class BABFGatherer:
 
         Parameters
         ----------
-        data : dict or ResultsHolder
+        
+        data : dict or ResutlsBABF
             Simulation data, extracted as dictionary from ResultsHolder
         """
         if self.rank in self.roots:
@@ -137,10 +151,13 @@ class BABFGatherer:
 
         Parameters
         ----------
+        
         fields : List[str]
             fields to extract
+        
         Returns
         -------
+        
         List[str]|None
             if root process, return list of lines to print, else return `None`
         """
@@ -162,10 +179,13 @@ class BABFGatherer:
 
         Parameters
         ----------
+        
         fields : List[str]
             fields to extract
+        
         Returns
         -------
+        
         dict|None
             if root process, return dict of fields to print, else return `None`
         """
@@ -235,8 +255,10 @@ class BABFGatherer:
 
         Parameters
         ----------
+        
         step : int 
             step number of BABF procedure
+        
         block : bool 
             key word for constrained BABF method
 

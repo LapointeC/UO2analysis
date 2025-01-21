@@ -17,17 +17,20 @@ class BaseParser:
         
         Parameters
         ----------
+        
         xml_path : os.PathLike[str]
             path to XML file, default None
         
         Methods
-        ----------
+        -------
+        
         __call__
         find_suffix_and_write
         
 
         Raises
         ------
+        
         IOError
             If path is not found
         """
@@ -69,6 +72,7 @@ class BaseParser:
 
         Returns
         -------
+        
         bool
         """
         if not self.has_potential:
@@ -109,6 +113,7 @@ class BaseParser:
 
         Returns
         -------
+        
         dict
             Dictionary-of-dictionaries' and 'parameters'
         """
@@ -145,6 +150,7 @@ class BaseParser:
 
         Parameters
         ----------
+        
         xml_path_data : xml.etree.ElementTreeElement
             The <PathwayConfigurations> branch of the configuration file,
             represented as an ElementTree Element
@@ -167,6 +173,7 @@ class BaseParser:
 
         Parameters
         ----------
+        
         xml_parameters : xml.etree.ElementTreeElement
             The <Parameters> branch of the configuration file,
             represented as an ElementTree Element
@@ -177,8 +184,10 @@ class BaseParser:
 
             Parameters 
             ----------
+            
             str_xml : str
                 string to convert 
+            
             Returns 
             -------
 
@@ -230,6 +239,7 @@ class BaseParser:
 
         Parameters
         ----------
+        
         path : os.PathLike[str] or list[os.PathLike[str]]
             path to potential file or list of files (for e.g. SNAP)
         """
@@ -251,6 +261,7 @@ class BaseParser:
 
         Parameters
         ----------
+        
         species : str | List[str]
             string or list of species
         """
@@ -283,6 +294,7 @@ class BaseParser:
 
         Parameters
         ----------
+        
         xml_parameters : xml.etree.ElementTreeElement
             The <Scripts> branch of the configuration file,
             represented as an ElementTree Element
@@ -301,6 +313,7 @@ class BaseParser:
 
         Returns
         -------
+        
         xml.etree.ElementTree.Element
             Data as xml.etree.ElementTree
         """
@@ -310,8 +323,10 @@ class BaseParser:
 
             Parameters
             ----------
+            
             key : str
                 key
+            
             data : Any
                 data
             """
@@ -365,6 +380,7 @@ class BaseParser:
         
         Parameters
         ----------
+        
         xml_file : str, optional
             path to XML file, default None
         """
@@ -386,14 +402,19 @@ class BaseParser:
            
         Parameters
         ----------
+        
         field : str
             string to be searched
+        
         key : str
             will search for %key%
+        
         value : ScriptArg
             replacement value
+        
         Returns
         -------
+        
         str
             the string with replaced values
         """
@@ -407,13 +428,16 @@ class BaseParser:
 
         Parameters
         ----------
+        
         script_key : str
             key for <Script> in XML file
+        
         args : None | dict, optional
             Dictionary of key,value pairs for replace(), by default None
 
         Returns
         -------
+        
         str
             The script with any keywords replaced
         """

@@ -1,6 +1,6 @@
 import os,shutil
 import numpy as np
-from .lattice import SolidAse
+from ..structure.lattice import SolidAse
 from numpy.random import normal
 
 import pickle
@@ -54,8 +54,8 @@ class AtomsAssembly :
     def update_assembly(self, struct : str, atoms : Atoms) -> None : 
         """Update assembly object with structures
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         struct : str 
             name of the structure to fill 
@@ -72,8 +72,8 @@ class AtomsAssembly :
     def extract_number_of_atoms(self, struct : str) -> int : 
         """Give the total number of atom for a given structure
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         struct : str 
             structure to do 
@@ -89,8 +89,8 @@ class AtomsAssembly :
     def extract_covariance_matrix_atom(self, struct : str) -> Dict[int,np.ndarray] :
         """Build the local thermic covariance matrix for each atom of a structure
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
         struct : str
             Structure to do 
 
@@ -120,8 +120,8 @@ class AtomsAssembly :
     def extract_covariance_matrix_atom_array(self, struct : str) -> np.ndarray :
         """Build the local thermic covariance matrix for each atom of a structure
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
         struct : str
             Structure to do 
 
@@ -159,8 +159,8 @@ class AtomsAssembly :
     def fill_MLdata(self, struct : str, atoms : Atoms, covariance : Dict[int,np.ndarray], name_poscar : str = None) -> None :
         """Fill the ml_data dictionnary with atomic configurations, covariance matrix
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         struct : str 
             Structure to fill 
@@ -190,8 +190,8 @@ class ThermicSampling :
                  save_diag : bool = False) -> None : 
         """Init method for ```ThermicSampling``` object
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         dic_size : Dict[str, List[int]]
             Dictionnary with cristallographic structure as keys and associated size of system
@@ -264,8 +264,8 @@ class ThermicSampling :
     def read_hdf5_file(self, sym : str = 'Fe') -> Dict[str, Dynamical] :
         """Read vibration data from ```.h5``` file
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         sym : str 
             Type of species associated to vibration data
@@ -290,8 +290,8 @@ class ThermicSampling :
     def CheckFrequencies(self, eigenvalues : np.ndarray, eigenvector : np.ndarray, struc : str) -> Tuple[np.ndarray, np.ndarray, bool] : 
         """Check vibration modes to ensure that the configuration is corresponding to a minimum (only 3 frequencies should be equal to 0 in periodic systems)
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         eigenvalues : np.ndarray 
             Vibration frequencies vector 
@@ -327,8 +327,8 @@ class ThermicSampling :
     def diagonalise_dynamical_matrix(self, save : bool = False, compute_time : bool = True) :
         """Diagonalise all the dynamical matrices for ```.h5``` data
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
         save : bool 
             Diagonalisation data are stored into ```.h5``` if True 
@@ -370,8 +370,8 @@ class ThermicSampling :
         """Generate thermic noise on atoms for a given temperature
         Amplitude of displacement are based on equipartion theorem at debye frequency
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         temperature : float 
             Tempertaure of the thermic noise
@@ -420,8 +420,8 @@ class ThermicSampling :
     def GenerateDBDictionnary(self, atoms_assembly : AtomsAssembly) -> Tuple[dict, dict] : 
         """Generate the ```DBDictionnary``` object associated to a given ```AtomsAssembly``` object 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms_assembly : AtomsAssembly 
             ```AtomsAssembly``` object to convert 
@@ -450,8 +450,8 @@ class ThermicSampling :
     def writer(self, db_dic : dict , path_writing : os.PathLike[str]) -> None : 
         """Little ```milady``` poscar writer ...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         db_dic : dict
             Data dictionnary (see ```DBDictionnaryBuilder``` doc...)
@@ -469,8 +469,8 @@ class ThermicSampling :
     def fill_dictionnaries(self, atoms_assembly : AtomsAssembly, ml_dic : dict) -> None :
         """Fill local dictionnaries for ```ThermicSampling``` object...
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
         atoms_assembly : AtomsAssembly
             ```AtomsAssembly``` data
@@ -485,8 +485,8 @@ class ThermicSampling :
     def build_covariance_estimator_basic(self, path_writing : os.PathLike[str] = './ml_poscar', symbol : str = 'Fe') -> None :
         """Build displacement covariance estimator for whole data based on thermic harmonic vibration sampling (debug version)...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         path_writing : os.PathLike[str]
             Path to write ```milady``` poscars
@@ -530,8 +530,8 @@ class ThermicSampling :
     def build_covariance_estimator(self, path_writing : os.PathLike[str] = './ml_poscar', nb_sigma : float = 1.5) -> None :
         """Build displacement covariance estimator for whole data based on thermic harmonic vibration sampling
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         path_writing : os.PathLike[str]
             Path to write ```milady``` poscars
@@ -577,8 +577,8 @@ class ThermicSampling :
     def build_pickle(self, path_pickles : os.PathLike[str] = './thermic_sampling.pickle') -> None : 
         """Build pickle file for ```ThermicSampling``` object
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         path_pickles : os.PathLike[str]
             Path to write pickle file
@@ -597,8 +597,8 @@ class ThermicFiting :
     def flatten_dic_covariance(self, dic_cov : Dict[int,np.ndarray]) -> np.ndarray : 
         """Build flat array (6,) from displacement covariance matrix (3,3)
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         dic_cov : Dict[int,np.ndarray]
             Dictionnary with index as key and associated displacement covariance matrix
@@ -623,8 +623,8 @@ class ThermicFiting :
     def update_fit_data(self, key : str, array_desc : np.ndarray, dic_cov : Dict[int, np.ndarray]) -> None : 
         """Update fit dictionnary 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         key : str
             Key of the dictionnary to update 
@@ -646,8 +646,8 @@ class ThermicFiting :
     def pseudo_inverse_regression(self, y : np.ndarray, X : np.ndarray, lamb : float = 1e-4) -> np.ndarray : 
         """Build linear regression model based on More-Penrose pseudo inverse
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         y : np.ndarray 
             Targets (M,1) 
@@ -670,8 +670,8 @@ class ThermicFiting :
     def build_regression_models(self, key : str) -> None : 
         """Generate regression model for a given key
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         key : str 
             Key of the model to adjust

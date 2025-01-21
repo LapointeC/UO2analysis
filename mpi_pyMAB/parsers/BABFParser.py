@@ -12,18 +12,23 @@ class BABFParser(BaseParser):
     
     Parameters
     ----------
+    
     xml_path : os.PathLike[str]
         path to XML file, default None
+    
     postprocessing: bool, optional
         are we just looking in postprocess?, default False
+    
     Methods
     ----------
+    
     __call__
     find_suffix_and_write
     
 
     Raises
     ------
+    
     IOError
         If path is not found
     """
@@ -41,10 +46,13 @@ class BABFParser(BaseParser):
 
         Parameters
         ----------
+        
         key : str
             key of parameter. Must already exist if create is `False`
+        
         value : Any
             value for entry
+        
         create : bool, optional
             Create new entry if true    
         """
@@ -57,6 +65,7 @@ class BABFParser(BaseParser):
 
         Parameters
         ----------
+        
         worker_instance : int
             unique to each worker, to ensure independent seed
         """
@@ -72,6 +81,7 @@ class BABFParser(BaseParser):
 
         Returns
         -------
+        
         int
             a random integer
         """
@@ -89,6 +99,7 @@ class BABFParser(BaseParser):
 
         Returns
         -------
+        
         str
             the parameter string
         """
@@ -138,6 +149,7 @@ class BABFParser(BaseParser):
 
         Returns
         -------
+        
         dict
             Dictionary-of-dictionaries with two keys 'axes' and 'parameters'
         """

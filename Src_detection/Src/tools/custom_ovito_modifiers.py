@@ -1,9 +1,10 @@
 import numpy as np
 
 from ase import Atoms
-from typing import List, Dict
+from typing import List, Dict, TypedDict
 from warnings import warn
 
+import ovito
 import matplotlib.pyplot as plt
 from matplotlib import colors
 
@@ -11,6 +12,10 @@ from ovito.io.ase import ase_to_ovito
 from ovito.pipeline import PipelineSourceInterface
 from ovito.io import *
 from ovito.data import DataCollection
+from ovito.traits import Color
+from matplotlib.rcsetup import _validators
+from ovito.vis import ViewportOverlayInterface
+from traits.api import Bool, Code, Enum, Range
 
 ########################################################
 ## FRAME INTERFACE FOR OVITO
@@ -31,6 +36,82 @@ class FrameOvito(PipelineSourceInterface) :
         data_atoms : DataCollection = ase_to_ovito(self.list_atoms[frame])
         data.particles = data_atoms.particles
         data.cell = data_atoms.cell
+
+#######################################################
+# LATEX OVERLAY
+#######################################################
+class TeXLabel(TypedDict) :
+    """Subclass for LateX labelling"""
+    label : str
+    x_offset : float
+    y_offset : float
+    color : np.ndarray
+
+class LaTeXTextOverlay(ViewportOverlayInterface):
+    """Init method for Latex labeling in Ovito Viewport 
+    
+    Parameters
+    ----------
+
+    dictionnary_label : Dict[int,TexLabel]
+        Dictionnary containing all data to draw label in viewport
+    """
+    def __init__(self, dictionnary_label : Dict[int,TeXLabel]) -> None :
+        self.dictionnary_label = dictionnary_label
+
+    text = Code(value=r"\exp^{i \pi} + 1 = 0", label="Text")
+    font = Enum(_validators["mathtext.fontset"].valid.values(), label="Font")
+    fontsize = Range(low=1, high=None, value=50, label="Font size")
+    if ovito.version >= (3, 10, 3):
+        text_color = Color(default=(0.0, 0.0, 0.0), label="Text color")
+    else:
+        text_color = (0.0, 0.0, 0.0)
+    px = Range(low=0.0, high=1.0, value=0.5, label="X position")
+    py = Range(low=0.0, high=1.0, value=0.5, label="Y position")
+    if ovito.version >= (3, 10, 3):
+        show_background = Bool(False, label="Show background")
+        background_color = Color(default=(1.0, 0.5, 0.5), label="Background color")
+
+    def render(self, 
+               canvas: ViewportOverlayInterface.Canvas, 
+               data: DataCollection, 
+               **kwargs) -> None :
+        
+        if ovito.version >= (3, 10, 3) and self.show_background:
+            bbox = dict(
+                boxstyle="round",
+                ec=self.background_color,
+                fc=self.background_color,
+            )
+        else:
+            bbox = None
+
+        with canvas.mpl_figure(pos=(self.px - 0.5, 0.5 + self.py),
+                               size=(1.0, 1.0),
+                               anchor="north west",
+                               alpha=0,
+                               tight_layout=True) as fig:
+            ax = fig.subplots()
+
+            identifier_data : int = data.particles_['LabelLatex'][:]
+            label = self.dictionnary_label[identifier_data]['label']
+            x_offset = self.dictionnary_label[identifier_data]['x_offset']
+            y_offset = self.dictionnary_label[identifier_data]['y_offset']
+            color = self.dictionnary_label[identifier_data]['color']
+
+            if self.text:
+                ax.text(
+                    x_offset,
+                    y_offset,
+                    r"%s"%(label),
+                    fontsize=self.fontsize,
+                    horizontalalignment="center",
+                    verticalalignment="center",
+                    color=color,
+                    math_fontfamily=self.font,
+                    bbox=bbox,
+                )
+            ax.axis("off")
 
 class NaiveOvitoModifier : 
     """Naive ```OvitoModifier``` for debug ..."""

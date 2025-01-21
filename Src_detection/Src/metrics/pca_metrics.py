@@ -15,6 +15,20 @@ class PCAModel :
             self._load_pkl(path_pkl)
         else : 
             self.models : Dict[str, PCA_] = {}
+            self.name = 'PCA'
+
+    def _update_name(self, name : str) -> None : 
+        """Update name of ```PCAModel```
+        
+        Parameters
+        ----------
+
+        name : str
+            New name for ```PCAModel```
+        """
+        
+        self.name = name 
+        return 
 
     def _get_pca_model(self, list_atoms : List[Atoms], species : str, n_component : int = 2) -> np.ndarray : 
         """Build PCA model from data"""

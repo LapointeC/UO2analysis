@@ -33,7 +33,7 @@ class Dumbells(TypedDict) :
     """
     center : np.ndarray
     orientation : np.ndarray
-
+    unit_norm : float
 
 ##############
 ## C15
@@ -82,14 +82,14 @@ class C15Builder :
             print(f'... Initial number of atoms in supercell is {len(self.cubic_supercell_unit)}')
 
     def InputsParser(self) -> None : 
-        """Read XML file correspondinf to the center of ```A15``` atoms"""
+        """Read XML file correspondinf to the center of ```C15``` atoms"""
         xml_root = ET.parse(self.path_inputs)
         for xml_param in xml_root.getroot() : 
             if xml_param.tag == 'C15Centers':
                 for id_cent, cent in enumerate(xml_param) : 
                     if not id_cent in self.centerC15.keys() : 
                         self.centerC15[id_cent] = {}
-                    self.centerC15[id_cent]['center'] = np.array([int(el) for el in cent.text.split()])
+                    self.centerC15[id_cent]['center'] = np.array([float(el) for el in cent.text.split()])
 
             if xml_param.tag == 'C15Type':
                 for id_type, type in enumerate(xml_param) : 
@@ -101,13 +101,19 @@ class C15Builder :
                 for id_cent, cent in enumerate(xml_param) : 
                     if not id_cent in self.dumbells.keys() : 
                         self.dumbells[id_cent] = {}
-                    self.dumbells[id_cent]['center'] = np.array([int(el) for el in cent.text.split()])
+                    self.dumbells[id_cent]['center'] = np.array([float(el) for el in cent.text.split()])
 
             if xml_param.tag == 'DumbellOrientation':
                 for id_orien, orien in enumerate(xml_param) : 
                     if not id_orien in self.dumbells.keys() : 
                         self.dumbells[id_orien] = {}
                     self.dumbells[id_orien]['orientation'] = np.array([float(el) for el in orien.text.split()])
+
+            if xml_param.tag == 'DumbellUnitNorm':
+                for id_norm, norm in enumerate(xml_param) : 
+                    if not id_norm in self.dumbells.keys() : 
+                        self.dumbells[id_norm] = {}
+                    self.dumbells[id_norm]['unit_norm'] = float(norm.text)
 
         self.check_out_parser()
 
@@ -120,6 +126,10 @@ class C15Builder :
         for key in self.dumbells.keys() :
             if [k for k in self.dumbells[key].keys()] not in [['orientation', 'center'],['center', 'orientation']] :
                 raise TimeoutError(f'Missing orientation or center for {key} (Dumbell)')
+            
+            #default value for unit_norm
+            if not 'unit_norm' in self.dumbells[key].keys() : 
+                self.dumbells[key]['unit_norm'] = 1.0
 
     def compute_cell_size(self) -> List[int] : 
         """Compute the size of the cubic supercell to put the dislocation
@@ -194,14 +204,14 @@ class C15Builder :
         if cluster_size < minimal_cluster_size : 
             warn(f'Minimal size for perfect C15 cluster is {minimal_cluster_size} AA')
             self.cubic_supercell_unit, self.size = self.build_cubic_supercell(draft=True, size=minimal_cluster_size)
-            center_coordinates = np.array([ int(np.ceil(0.5*self.size)) for _ in range(3) ])
+            center_coordinates = np.array([ float(np.ceil(0.5*self.size)) for _ in range(3) ])
             self.centerC15[0] = {'center':center_coordinates,
                                  'type':'type1'}
 
         else :
             self.cubic_supercell_unit, self.size = self.build_cubic_supercell(draft=True, size=cluster_size)
             Nb_C15 = self.compute_number_perfect_C15(minimal_cluster_size, cluster_size) 
-            center_coordinates = np.array([ int(np.ceil(0.5*self.size)) for _ in range(3) ])
+            center_coordinates = np.array([ float(np.ceil(0.5*self.size)) for _ in range(3) ])
             
             change_type = {'type1':'type2',
                            'type2':'type1'}
@@ -222,7 +232,7 @@ class C15Builder :
                                             'link':random.shuffle(self.octahedron.typeOcta[new_type_center].link.tolist())}
 
                 idx_direction = idx_C15%len(self.explorated_dict['link'])
-                new_center = center_coordinates + self.explorated_dict['link'][idx_direction]
+                new_center = center_coordinates + 0.5*self.explorated_dict['link'][idx_direction]
                 self.centerC15[idx_C15] = {'center':new_center,
                                                'type':self.explorated_dict['type']}
 
@@ -253,7 +263,7 @@ class C15Builder :
             for id_tetra, tetra in enumerate(self.octahedron.typeOcta[C15_center['type']].atom.T) : 
                 # loop over gaos sites !
                 for gaos_tetra in self.octahedron.typeOcta[C15_center['type']].gaos[:,:,id_tetra] :     
-                    new_C15_position = center_coordinate + tetra + 0.5*gaos_tetra
+                    new_C15_position = center_coordinate + 0.5*tetra + 0.25*gaos_tetra
                     if len(list_position_C15) > 0 : 
                         distance_array = np.linalg.norm(np.array(list_position_C15) - new_C15_position, axis = 1)
                         # C15 positions already in cluster
@@ -281,8 +291,8 @@ class C15Builder :
         """      
         dumbells_atoms = Atoms()
         for _, dumb in self.dumbells.items() : 
-            coordinates_dumb = np.array([ dumb['center'] + 0.5*dumb['orientation'],
-                                          dumb['center'] - 0.5*dumb['orientation']])
+            coordinates_dumb = np.array([ dumb['center'] + 0.5*dumb['unit_norm']*dumb['orientation'],
+                                          dumb['center'] - 0.5*dumb['unit_norm']*dumb['orientation']])
             dumbells_atoms += Atoms( 2*[self.dict_param['element']], coordinates_dumb)
 
         return dumbells_atoms
@@ -310,7 +320,7 @@ class C15Builder :
             ```Atoms``` object where ```removeatom``` have been removed
         
         """
-        ToRemoveCoordinate = np.array([ self.octahedron.typeOcta[val['type']].removeatom.T + val['center'] for _, val in self.centerC15.items() ])
+        ToRemoveCoordinate = np.array([ 0.5*self.octahedron.typeOcta[val['type']].removeatom.T + val['center'] for _, val in self.centerC15.items() ])
         ToRemoveCoordinate = ToRemoveCoordinate.reshape((3,len(self.centerC15)*6)).T
         ToRemoveCoordinateC15 = C15_system.positions
 
@@ -325,9 +335,11 @@ class C15Builder :
         #C15
         for idx, pos in enumerate(system.positions) : 
             array_distance_idx = np.linalg.norm( ToRemoveCoordinateC15 - pos, axis = 1)
-            if np.amin(array_distance_idx) < tolerance : 
+            # tricky for tetrahedrons !
+            if np.amin(array_distance_idx) < 0.5 : 
                 list_idx2remove.append(idx)
 
+        list_idx2remove = np.unique(list_idx2remove).tolist()
         new_system = system.copy()
         del new_system[[idx for idx in list_idx2remove]]
         
@@ -385,7 +397,6 @@ class C15Builder :
 
         Natoms_bulk = len(self.cubic_supercell_unit)
         self.cubic_supercell_unit = self.remove_atoms_in_system(self.extra_atom, self.cubic_supercell_unit)
-
         #Assign defect value for bulk system ...
         self.cubic_supercell_unit.set_array('defect',
                             np.zeros(len(self.cubic_supercell_unit),),
@@ -477,6 +488,12 @@ class A15Builder :
                         self.dumbells[id_orien] = {}
                     self.dumbells[id_orien]['orientation'] = np.array([float(el) for el in orien.text.split()])
 
+            if xml_param.tag == 'DumbellUnitNorm':
+                for id_norm, norm in enumerate(xml_param) : 
+                    if not id_norm in self.dumbells.keys() : 
+                        self.dumbells[id_norm] = {}
+                    self.dumbells[id_norm]['unit_norm'] = float(norm.text)
+
         self.check_out_parser()
 
     def check_out_parser(self) -> None :
@@ -488,7 +505,10 @@ class A15Builder :
         for key in self.dumbells.keys() :
             if [k for k in self.dumbells[key].keys()] not in [['orientation', 'center'],['center', 'orientation']] :
                 raise TimeoutError(f'Missing orientation or center for {key} (Dumbell)')
-    
+            
+            if not 'unit_norm' in self.dumbells[key].keys() : 
+                self.dumbells[key]['unit_norm'] = 1.0
+
     def compute_cell_size(self) -> List[int] : 
         """Compute the size of the cubic supercell to put the dislocation
         
@@ -600,8 +620,8 @@ class A15Builder :
         """      
         dumbells_atoms = Atoms()
         for _, dumb in self.dumbells.items() : 
-            coordinates_dumb = np.array([ dumb['center'] + 0.5*dumb['orientation'],
-                                          dumb['center'] - 0.5*dumb['orientation']])
+            coordinates_dumb = np.array([ dumb['center'] + 0.5*dumb['unit_norm']*dumb['orientation'],
+                                          dumb['center'] - 0.5*dumb['unit_norm']*dumb['orientation']])
             dumbells_atoms += Atoms( 2*[self.dict_param['element']], coordinates_dumb)
 
         return dumbells_atoms
@@ -647,6 +667,7 @@ class A15Builder :
             if np.amin(array_distance_idx) < tolerance : 
                 list_idx2remove.append(idx)
 
+        list_idx2remove = np.unique(list_idx2remove).tolist()
         new_system = system.copy()
         del new_system[[idx for idx in list_idx2remove]]
         

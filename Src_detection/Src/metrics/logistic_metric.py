@@ -16,7 +16,21 @@ class LogisticRegressor :
             self._load_pkl(path_pkl)
         else : 
             self.models : Dict[str, Logistic] = {}
-    
+            self.name = 'Logistic'
+
+    def _update_name(self, name : str) -> None : 
+        """Update name of ```LogisticRegressor```
+        
+        Parameters
+        ----------
+
+        name : str
+            New name for ```LogisticRegressor```
+        """
+        
+        self.name = name 
+        return 
+
     def _get_metadata(self) -> List[str] : 
         """Get metadata for ```LogisticRegressor``` object
         

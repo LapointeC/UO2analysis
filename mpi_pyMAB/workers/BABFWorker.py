@@ -7,6 +7,8 @@ from .LAMMPSWorker import LAMMPSWorker
 from .ReferenceWorker import ReferenceWorker
 from ..results.ResultsBABF import ResultsBABF
 
+from DynamicsSchemes import Overdamped_Langevin_dynamic, BAOAB_scheme, Implicit_Verlet_dynamic
+
 class BABFWorker(LAMMPSWorker,ReferenceWorker):
     """
         The hyperplane-constrained sampling run.
@@ -43,20 +45,22 @@ class BABFWorker(LAMMPSWorker,ReferenceWorker):
                  rank: int, roots: List[int]) -> None:
         super().__init__(comm, parameters, tag, rank, roots)
     
-    def update_free_energy_quantities(self, results : ResultsBABF, temperature : float, block : bool = False) -> ResultsBABF : 
+    def update_free_energy_quantities(self, results : ResultsBABF, temperature : float) -> ResultsBABF : 
         """Perform a global update of ResultsBABF object with new estimation of free energy quantities
         
         Parameters:
         -----------
+        
         results : ResultsBABF 
             Object containing all free energy data and methods
+        
         temperature : float 
             Simulation temperature
-        block : bool 
-            Key word for constrained babf
+
 
         Results
         -------
+        
         ResultsBABF
             Updated free energy object
 
@@ -66,7 +70,7 @@ class BABFWorker(LAMMPSWorker,ReferenceWorker):
         energy_reference = self.evaluate_reference_energy()
 
         """Little temperature update !"""
-        results.update_temperature( self.evaluate_potential_temperature(), block=block )
+        results.update_temperature( self.evaluate_potential_temperature(), block=self.block)
 
         mixed_potential = results.evaluate_U_lambda(energy_reference,energy_lammps)
         if results.free_energy is None : 
@@ -76,13 +80,19 @@ class BABFWorker(LAMMPSWorker,ReferenceWorker):
 
         """Here we update p_A(\lambda|q)"""
         conditional_p_lambda = results.evaluate_conditional_p_lambda(temperature,mixed_potential,free_energy)
-        results.update_data_babf(mixed_potential*conditional_p_lambda,'sum_w_AxU_dl',block=block)
-        results.update_data_babf(np.power(mixed_potential,2)*conditional_p_lambda,'sum_w_AxU2_dl',block=block)
-        results.update_data_babf(conditional_p_lambda,'sum_w_A',block=block)
+        results.update_data_babf(mixed_potential*conditional_p_lambda,'sum_w_AxU_dl',block=self.block)
+        results.update_data_babf(conditional_p_lambda,'sum_w_A',block=self.block)
+        
+        """here is the variance estimator for BABF schem
+        [ \mathcal{O}p - < \mathcal{O}p > ]^2 = \mathcal{O}^2p^2 - 2\mathcal{O}p < \mathcal{O}p > + < \mathcal{O}p >^2"""
+        mean_force = results.evaluate_derivative_free_energy(block=self.block)
+        Op = mixed_potential*conditional_p_lambda
+        variance_estimator = np.power(Op, 2.0) - 2*mean_force*Op + np.power(mean_force, 2.0)
+        results.update_data_babf(variance_estimator,'sum_w_A2xU2_dl',block=self.block)
+        
         results.data_babf['pc_lam_q'] = conditional_p_lambda   
 
-        
-        if block : 
+        if self.block : 
             energy_lammps += self.evaluate_standard_constrained_energy()
             mixed_potential_c = results.evaluate_U_lambda(energy_reference,energy_lammps)
             
@@ -90,186 +100,88 @@ class BABFWorker(LAMMPSWorker,ReferenceWorker):
                 free_energy_c = np.zeros(len(mixed_potential))
             else : 
                 free_energy_c = results.free_energy_block
+            
             """Here we update \pi_A^c(\lambda|q) for constrained free energy"""
             conditional_pi_lambda = results.evaluate_conditional_p_lambda(temperature,mixed_potential_c,free_energy_c)
             results.update_data_babf(mixed_potential_c*conditional_pi_lambda,'sum_w_AxU_dl',block=True)
-            results.update_data_babf(np.power(mixed_potential_c,2)*conditional_pi_lambda,'sum_w_AxU2_dl',block=True)
+
+            """here is the variance estimator for BABF schem
+            [ \mathcal{O}p - < \mathcal{O}p > ]^2 = \mathcal{O}^2p^2 - 2\mathcal{O}p < \mathcal{O}p > + < \mathcal{O}p >^2"""
+            mean_force = results.evaluate_derivative_free_energy(block=True)
+            Op = mixed_potential*conditional_p_lambda
+            variance_estimator = np.power(Op, 2.0) - 2*mean_force*Op + np.power(mean_force, 2.0)
+            results.update_data_babf(variance_estimator,'sum_w_A2xU2_dl',block=True)
+                 
             results.update_data_babf(conditional_pi_lambda,'sum_w_A',block=True)
+            results.data_babf_block['pc_lam_q'] = conditional_pi_lambda
             results.data_babf_block['pc_lam_q'] = conditional_pi_lambda           
     
+        if self.Jarzynski : 
+            work_jar = self.compute_deltaW(self.force,(self.x - self.previous_x))
+            self.update_Jarzynski(results, work_jar)
+
         return results
 
-    """DYNAMICS DEFINITIONS"""
-    def Implicit_Verlet_dynamic(self,results : ResultsBABF, temperature : float, delta_t : float, block : bool = False) -> ResultsBABF:
-        """Perform midpoint Euler-Verlet for overdumped dynamic
-        ref : Free energy computations a mathematical perspective, p. 94
+    def update_Jarzynski(self, results : ResultsBABF, 
+                         jarzynski_work : float) -> None : 
+        """Update Jarzynski correction for constrained dynamics
+
         Parameters
         ----------
+
         results : ResultsBABF 
-            Object containing all free energy data and methods
-        temperature : float 
-            Simulation temperature
-        delta_t : float 
-            Time step for stochastic dynamic 
-        block : bool 
-            Key word for constrained babf
+            Object containing all free energy data
 
-        Results
+        
+        jarzynski_work : float
+            Work due to constrained forces
+        """           
+
+        """Jarzynski update !"""
+        jar_work_lambda = results.Jarzynski_work_lambda(jarzynski_work)
+        results.update_data_babf(jar_work_lambda*results.data_babf_block['pc_lam_q'],'sum_jarzynski_work')
+
+        return
+
+    def EvaluateEffectiveForces(self, results : ResultsBABF) -> np.ndarray : 
+        """Compute effective force to propagate stochastic dynamics 
+        
+        \mathbb{F}(q) = \int_{0}^{1} \Nabla_{q} U_{\lambda}(q) p(q|\lambda) d \lambda
+
+        Parameters
+        ----------
+
+        results : ResultsBABF 
+            Object containig all free energy data
+
+        Returns 
         -------
-        ResultsBABF
-            Updated free energy object
+
+        np.ndarray
+            Effective force to apply for stochastic dynamics
+
         """
-
-        gamma = 1/(delta_t*100)
-
-        """v_n -> v_n+1/4"""
-        self.v = self.v*np.array(np.exp(-gamma*0.5*delta_t)) + self.sampling_Wigner_process(temperature,0.5*delta_t,self.v.shape)
-
-        """v_n+1/4 -> v_n+1/2"""
-        self.v = self.v + self.force*0.5*delta_t
-
-        """q_n -> q_n+1"""
-        self.x = self.x + self.v*delta_t
-
-        """update positions"""
-        self.centering_system()
-        self.x = self.pbc(self.x)
-        self.x_reference = self.pbc(self.x_reference)
-        self.scatter('x',self.x)
-
-        """update forces"""
         forces_lammps = self.evaluate_lammps_forces()
-        if block : 
+        if self.block :
             forces_lammps += self.evaluate_constrained_forces()
 
         forces_reference = self.evaluate_reference_forces()
         effective_forces = results.evaluate_effective_forces_dynamic(forces_reference,forces_lammps)
-        self.force = effective_forces
-
-        """update result object"""
-        results = self.update_free_energy_quantities(results,
-                                                     temperature,
-                                                     block=block)
-
-        """p_n+1/2 -> p_n+3/4"""
-        self.v = self.v + effective_forces*0.5*delta_t
-
-        """p_n+3/4 -> p_n+1"""
-        self.v = self.v*np.exp(-gamma*0.5*delta_t) + self.sampling_Wigner_process(temperature,0.5*delta_t,self.v.shape)
-
-        return results
-
-    def BAOAB_scheme(self,results : ResultsBABF, temperature : float , delta_t : float, block : bool = False) -> ResultsBABF:
-        """Perform BAOAB predictor-corrector schem
-        ref : Free energy computations a mathematical perspective, p. 94
-        Parameters
-        ----------
-        results : ResultsBABF 
-            Object containing all free energy data and methods
-        temperature : float 
-            Simulation temperature
-        delta_t : float 
-            time step for stochastic dynamic 
-        block : bool 
-            Key word for constrained babf
-
-        Results
-        -------
-        ResultsBABF
-            Updated free energy object
-        """
-        gamma = 1/(delta_t*100)
-
-        """v^_n-1/2 -> v_n"""
-        self.v = self.v + self.mass_array@self.force*0.5*delta_t
-
-        """v_n -> v_n+1/2 (update of forces)"""
-        forces_lammps = self.evaluate_lammps_forces()
-        if block : 
-            forces_lammps += self.evaluate_constrained_forces()
-
-        forces_reference = self.evaluate_reference_forces()
-        effective_forces = results.evaluate_effective_forces_dynamic(forces_reference,forces_lammps)
-        self.force = effective_forces       
-        self.v = self.v + self.mass_array@effective_forces*0.5*delta_t
-
-        """update result object"""
-        results = self.update_free_energy_quantities(results,
-                                                     temperature,
-                                                     block=block)
-
-        """q_n -> q_n+1/2"""
-        self.x = self.x + self.v*0.5*delta_t
-
-        """p_n+1/2 -> p^_n+1/2"""
-        self.v = np.exp(-gamma*delta_t)*self.v + np.sqrt(1.0-np.exp(-2*gamma*delta_t))*self.sampling_Wigner_process(temperature,0.5*delta_t,self.v.shape)
-
-        """q_n+1/2 -> q_n+1"""
-        self.x = self.x + self.v*0.5*delta_t
-
-        """update in lammps !"""
-        self.centering_system()
-        self.x = self.pbc(self.x)
-        self.x_reference = self.pbc(self.x_reference)
-        self.scatter('x',self.x)
-
-        return results
-
-
-    def Overdamped_Langevin_dynamic(self, results : ResultsBABF, temperature : float, delta_t : float, block : bool = False) -> ResultsBABF:
-        """Perform Langevin scheme for overdumped dynamic
-        ref : Free energy computations a mathematical perspective, p. 99
-        Parameters
-        ----------
-        results : ResultsBABF 
-            Object containing all free energy data and methods
-        temperature : float 
-            Simulation temperature
-        delta_t : float 
-            time step for stochastic dynamic 
-        block : bool 
-            Key word for constrained babf
-
-        Results
-        -------
-        ResultsBABF
-            Updated free energy object
-        """
-
-        """Langevin dynamic update overdumped"""
-        forces_lammps = self.evaluate_lammps_forces()
-        if block :
-            forces_lammps += self.evaluate_constrained_forces()
-
-        forces_reference = self.evaluate_reference_forces()
-        effective_forces = results.evaluate_effective_forces_dynamic(forces_reference,forces_lammps)
-        self.force = effective_forces
-        self.x = self.x + effective_forces*delta_t + self.sampling_Wigner_process(temperature,delta_t,self.x.shape)
-
-        """update result object"""
-        results = self.update_free_energy_quantities(results,
-                                                     temperature,
-                                                     block=block)
-
-        """update in lammps !"""
-        self.centering_system()
-        self.x = self.pbc(self.x)
-        self.x_reference = self.pbc(self.x_reference)
-        self.scatter('x',self.x)
-
-        return results
-
+        self.force = effective_forces  
+        return self.force
 
     """UPDATE SCHEM"""
-    def update_step_BABF(self,results:ResultsBABF, block : bool = False) -> ResultsBABF:
+    def update_step(self,results: ResultsBABF) -> ResultsBABF:
         """Unitary step for stochastic dynamics with update of results objects
         Paramters 
         ---------
-        block : bool 
-            Key word for constrained BABF method
+        
+        results: ResultsBABF 
+            ResultsBABF object to update
 
         Returns
         -------
+        
         ResultsBABF
             updated object : 
             block = False : p_A(\lambda|q_i)
@@ -287,45 +199,10 @@ class BABFWorker(LAMMPSWorker,ReferenceWorker):
         delta_t = parameters('DeltaT')
         temperature = parameters('Temperature')
 
-        dictionnary_dynamic = {"ImpliciteVerlet": lambda res, b : self.Implicit_Verlet_dynamic(res,temperature,delta_t, block=b),
-                               "BAOAB": lambda res, b : self.BAOAB_scheme(res, temperature, delta_t, block=b),
-                               "OverdampedLangevin": lambda res, b : self.Overdamped_Langevin_dynamic(res, temperature, delta_t, block=b)}
+        dictionnary_dynamic = {"ImpliciteVerlet": lambda res : Implicit_Verlet_dynamic(self,res,temperature,delta_t),
+                               "BAOAB": lambda res : BAOAB_scheme(self,res, temperature, delta_t),
+                               "OverdampedLangevin": lambda res : Overdamped_Langevin_dynamic(self,res, temperature, delta_t)}
 
-        #if dynamic == 'ImpliciteVerlet' :
-        #    return self.Implicit_Verlet_dynamic(results, temperature , delta_t, block=block)
-        #if dynamic == 'BAOAB' : 
-        #    return self.BAOAB_scheme(results, temperature, delta_t, block=block)
-        #if dynamic == 'OverdampedLangevin' : 
-        #    return self.Overdamped_Langevin_dynamic(results,temperature,delta_t, block=block)
-        return dictionnary_dynamic[dynamic](results,block)
-
-    """THERMALISATION STEPS"""
-    def thermalisation_steps(self,results:ResultsBABF, block : bool = False) -> ResultsBABF :
-        """Perform thermalisation step without updating free energy estimator"""
-        parameters = lambda k: self.parameters(k)
-        thermalisation_step = parameters('ThermalisationStep')    
-        if self.rank == 0 : 
-            print('... Starting thermalisation procedure ... (%1.1e steps)'%(thermalisation_step))
-
-        for _ in range(thermalisation_step) : 
-            results = self.update_step_BABF(results, block=block)
-        
-        if self.rank == 0 : 
-            print('... Finishing thermalisation procedure ...')
-
-        return results
-
-  
-            
-
-
-
-        
-
-
-
-
-
-        
-
+        up_worker, up_results = dictionnary_dynamic[dynamic](results)
+        return up_results
 

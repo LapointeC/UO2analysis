@@ -19,7 +19,21 @@ class MCDModel :
             self._load_pkl(path_pkl)
         else : 
             self.models : Dict[str, MCD] = {}
-    
+            self.name = 'MCD'
+
+    def _update_name(self, name : str) -> None : 
+        """Update name of ```MCDModel```
+        
+        Parameters
+        ----------
+
+        name : str
+            New name for ```MCDModel```
+        """
+        
+        self.name = name 
+        return 
+
     def _fit_mcd_model(self, desc_selected : np.ndarray, species : str, contamination : float = 0.05) -> None : 
         """Build the mcd model for a given species
         

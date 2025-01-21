@@ -18,8 +18,8 @@ class HarmonicVibration :
                  working_directory : os.PathLike[str] = './harmonic_vib') -> None : 
         """Init method for ```HarmonicVibration```
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         system : Atoms 
             ```Atoms``` system to perform vibrationnal calculation
@@ -54,8 +54,8 @@ class HarmonicVibration :
     def InitSimulation(self, name_file : str = 'in.lmp') -> None : 
         """Initialise lammps instance for vibration calculations
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         name_file : str
             Name of lammps geometry file
@@ -100,8 +100,8 @@ class HarmonicVibration :
     def GetEinsteinOmega(self, temperature : float = 300.0) -> float : 
         """Compute Einstein pulsation of the system for a given temperature 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         temperature : float 
             Temperature in K
@@ -120,8 +120,8 @@ class HarmonicVibration :
     def CheckDynamicalSymmetricNorm(self, relative_norm : float) -> None : 
         """Check the relative symmetric norm of the dynamical matrix 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         relative_norm : float 
             Relative symmetric norm of the dynamical matrix
@@ -133,8 +133,8 @@ class HarmonicVibration :
     def CheckFrequencies(self, eigenvalues : np.ndarray) -> None : 
         """Check vibration modes to ensure that the configuration is corresponding to a minimum (only 3 frequencies should be equal to 0 in periodic systems)
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         eigenvalues : np.ndarray 
             Vibration frequencies vector 
@@ -152,8 +152,8 @@ class HarmonicVibration :
     def DynamicalMatrixEvaluation(self ,left_force_xi : np.ndarray, right_force_xi : np.ndarray, masse : float) -> np.ndarray:
         """Evaluate the dynamical vector for atom i
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         left_force_xi : np.ndarray
             Force vector for left perturbation

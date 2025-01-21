@@ -10,6 +10,8 @@ from ..parsers.BABFParser import BABFParser
 from ..workers.BABFWorker import BABFWorker
 from ..results.Gatherer import Gatherer
 
+from ..workers.DynamicsSchemes import thermalisation_steps
+
 class BABFManager(BaseManager):
     def __init__(self, world: MPI.Intracomm, 
                  xml_path:None|os.PathLike[str]=None,
@@ -20,16 +22,22 @@ class BABFManager(BaseManager):
 
         Parameters
         ----------
+        
         world : MPI.Intracomm
             MPI communicator
+        
         xml_path : None or os.PathLike[str], optional
             path to XML configuration file, default None
+        
         parameters : None or BABFParser object, optional
             preloaded BABFParser object, default None
+        
         restart_data : None or os.PathLike[str], optional
             path to CSV data file. Will read and skip already sampled parameters
+        
         Worker : BABFWorker, optional,
             Can be overwritten by child class, by default BABFWorker
+        
         Gatherer : Gatherer, optional
             Can be overwritten by child class, by default Gatherer
         """
@@ -50,11 +58,14 @@ class BABFManager(BaseManager):
             width:int=10,
             precision:int=5)->None:
         """Basic parallel MAB sampling
+        
         Parameters
         ----------
+        
         print_fields : List[str] or None
             Fields to print to screen, default None. 
             character count of field printout, default 10
+        
         precision : int
             precision of field printout, default 4
         """
@@ -63,12 +74,12 @@ class BABFManager(BaseManager):
         if print_fields is None:
             # to do !
             print_fields = \
-                ["Temperature","","<d_lambda F(1)>","A(1)","<A(1)^2> - <A(1)>^2"]
+                ["Temperature","","<d_lambda F(1)>","A(1)","< A(1) - <A(1)> >^2"]
         
         for f in print_fields:
             width = max(width,len(f))
         
-        def line(data:List[float|int|str]|Dict[str,float|int|str])->str:
+        def line(data:List[float|int|str]|Dict[str,float|int|str])-> str:
             """Format list of results to print to screen
             """
             if len(data) == 0:
@@ -105,11 +116,11 @@ class BABFManager(BaseManager):
         results = ResultsBABF(self.parameters['LambdaGrid'],
                               block=self.parameters['Block'])
 
-        results = self.Worker.thermalisation_steps(results, 
-                                                   block = self.parameters['Block'])
+        self.Worker, results = thermalisation_steps(self.Worker,
+                                                    results)
+        
         for it_lang in self.parameters["StochasticSteps"] : 
-            results = self.Worker.update_step_BABF(results,
-                                                   block=self.parameters['Block'])  
+            results = self.Worker.update_step(results)  
 
             if it_lang%self.parameters["WritingStep"] : 
                 screen_out = self.Gatherer.get_dict(print_fields)
@@ -119,13 +130,13 @@ class BABFManager(BaseManager):
                     
                     print(line(screen_out))
 
-                self.Gatherer.write_hdf5(f"{self.parameters['WorkingDirectory']}/mab.csv",
+                self.Gatherer.write_hdf5(f"{self.parameters['WorkingDirectory']}/mab.h5",
                                            it_lang,
                                            block=self.parameters['Block'])
                 self.world.Barrier()
 
             if it_lang%self.parameters["GatherStep"] : 
-                key_to_update = ['sum_w_AxU_dl', 'sum_w_AxU2_dl', 'sum_w_A']
+                key_to_update = ['sum_w_AxU_dl', 'sum_w_A2xU2_dl', 'sum_w_A']
                 results = self.Gatherer.Parallel_biais_full_update(results,
                                                                    key_to_update,
                                                                    block=self.parameters['Block'])

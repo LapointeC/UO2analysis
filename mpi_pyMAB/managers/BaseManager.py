@@ -8,12 +8,16 @@ class BaseManager:
 
         Parameters
         ----------
+        
         world : MPI.Intracomm
             MPI communicator
+        
         parser : BaseParser object 
             A BaseParser or inherited class instance
+        
         Worker : Worker class
             a predefined or custom Worker classes, default BaseWorker
+        
         Gatherer : Gatherer class
             a predefined or custom Gatherer classes, default BaseGatherer
     """

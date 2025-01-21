@@ -94,13 +94,19 @@ class DislocationsBuilder :
         fake_lattice = fake_solid_ase.structure(self.param_dict['structure'])
         positions_fake_lattice = fake_lattice.positions
         
-        list_rij = []
-        for i, pos_i in enumerate(positions_fake_lattice) :
-            for j, pos_j in enumerate(positions_fake_lattice) :
-                if i < j : 
-                    list_rij.append(pos_i-pos_j)
+        #list_rij = []
+        #for i, pos_i in enumerate(positions_fake_lattice) :
+        #    for j, pos_j in enumerate(positions_fake_lattice) :
+        #        if i < j : 
+        #            list_rij.append(pos_i-pos_j)
+    
+        # Compute pairwise differences
+        mask = np.triu(np.ones((positions_fake_lattice.shape[0], positions_fake_lattice.shape[0]), dtype=bool), k=1)
+        # Use broadcasting to calculate all pairwise differences
+        differences = positions_fake_lattice[:, np.newaxis, :] - positions_fake_lattice[np.newaxis, :, :]
+        # Apply the mask and reshape the result
+        array_rij = differences[mask]
 
-        array_rij = np.array(list_rij)
         normalised_array_rij = array_rij/np.linalg.norm(array_rij, axis = 1).reshape((array_rij.shape[0],1))        
         mask = np.abs(normalised_array_rij@self.normal_vector.T) > 1.0 - threshold
 

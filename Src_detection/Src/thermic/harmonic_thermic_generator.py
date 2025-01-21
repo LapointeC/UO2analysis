@@ -1,5 +1,5 @@
 import numpy as np
-from .lattice import SolidAse
+from ..structure.lattice import SolidAse
 from numpy.random import normal
 import os, shutil
 
@@ -23,8 +23,8 @@ class Fe_data :
     def _iron_based_a0(self, structure : str) -> float :
         """Give Fe a0 depending on cristallographic structure (not accurate)
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         structure : str 
             Cristallograhpic structure 
@@ -43,8 +43,8 @@ class Fe_data :
     def a0_T_Fe(self, temperature : float, a0 : float = 2.8553) -> float :
         """Estimate the lattice parameter expansion based on iron data
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         temperature : float 
             Temperature of the estimation
@@ -72,8 +72,8 @@ class HarmonicThermicGenerator :
     def __init__(self, temperature = List[float], configs_per_temp : int = 100) -> None : 
         """Init method for ```HarmonicThermicGenerator```
         
-        Parameters: 
-        -----------
+        Parameters 
+        ----------
 
         temperature : List[float]
             List of temperatures to sample 
@@ -104,8 +104,8 @@ class HarmonicThermicGenerator :
                                 relative_norm : float = 1e-2) -> None : 
         """Initialisation of ```HarmonicVibration``` object which performs dynamical matrix sampling and diagonalisation (couple with lammps)
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms system to compute vibrationnal properties
@@ -146,8 +146,8 @@ class HarmonicThermicGenerator :
     def compute_harmonic_spectra(self, name_file : os.PathLike[str] = 'in.lmp') -> None : 
         """Compute the harmonic spectra for a given system 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         name_file : os.PathLike[str]
             Path of lammps file associated to the interest system
@@ -162,8 +162,8 @@ class HarmonicThermicGenerator :
                                scaling_factor : float = 1.0) -> Atoms : 
         """Generate one realisation of harmonic thermic noise for a given system
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         temperature : float 
             Temperature of the harmonic thermic noise 
@@ -196,8 +196,8 @@ class HarmonicThermicGenerator :
         """Generate thermic noise on atoms for a given temperature
         Amplitude of displacement are based on equipartion theorem at debye frequency
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         temperature : float 
             Tempertaure of the thermic noise
@@ -223,8 +223,8 @@ class HarmonicThermicGenerator :
         """Generate thermic noise on atoms for a given temperature
         Amplitude of displacement are based on equipartion theorem at debye frequency
 
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         temperature : float 
             Tempertaure of the thermic noise
@@ -263,8 +263,8 @@ class HarmonicThermicGenerator :
     def _check_interatomic_distances(self, atoms : Atoms, temperature : float) -> None :
         """Compute / check the minimum distance in a periodic system
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             System to check 
@@ -286,8 +286,8 @@ class HarmonicThermicGenerator :
     def dirty_periodic_system(self, atoms : Atoms) -> np.ndarray : 
         """Build dirty periodic system from ```Atoms``` configuration
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             Atoms system to build periodic image
@@ -328,8 +328,8 @@ class HarmonicThermicGenerator :
                                   scaling_factor : float = 1.0) -> None : 
         """Generate thermic configurations for a given structure defined by the following parameters
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         structure : str
             Type of cristalographic structure to generate
@@ -390,8 +390,8 @@ class HarmonicThermicGenerator :
     def GenerateDBDictionnary(self) -> Tuple[dict, dict] : 
         """Generate the ```DBDictionnary``` object associated to a given ```AtomsAssembly``` object 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms_assembly : AtomsAssembly 
             ```AtomsAssembly``` object to convert 
@@ -420,8 +420,8 @@ class HarmonicThermicGenerator :
     def writer(self, db_dic : dict , path_writing : str) -> None : 
         """Little ```milady``` poscar writer ...
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         db_dic : dict
             Data dictionnary (see ```DBDictionnaryBuilder``` doc...)

@@ -3,7 +3,7 @@ from typing import Any,List, Dict, TypedDict, Optional
 import numpy as np
 from scipy import integrate
 
-class derivated_dic_babf(TypedDict) :
+class derivated_dic_babfKL(TypedDict) :
     sum_w_AxU_dl : np.ndarray
     sum_w_A2xU2_dl : np.ndarray
     sum_w_A : np.ndarray
@@ -14,6 +14,7 @@ class derivated_dic_babf(TypedDict) :
     sum_delta_W : float | None
     sum_jarzynski_work : np.ndarray
     sum_jarzynski_work2 : np.ndarray
+    v_lambda : np.ndarray
 
 class ResultsBABF:
     """BABF Results object, 
@@ -21,7 +22,6 @@ class ResultsBABF:
 
     Methods
     -------
-    
     __call__
     has_key
     """
@@ -40,28 +40,28 @@ class ResultsBABF:
         
         self.kB =  8.617333262e-5
         self.lambda_grid = convert_lambda_dict(lambda_grid)
-        self.data_babf : derivated_dic_babf = {'sum_w_AxU_dl':np.zeros(len(self.lambda_grid)),
+        self.data_babf : derivated_dic_babfKL = {'sum_w_AxU_dl':np.zeros(len(self.lambda_grid)),
                                                'sum_w_A2xU2_dl':np.zeros(len(self.lambda_grid)),
                                                'sum_w_A': omega*np.ones(len(self.lambda_grid)),
                                                'sum_pc_lam_q':np.zeros(len(self.lambda_grid)),
                                                'pc_lam_q':np.zeros(len(self.lambda_grid)),
                                                'compt':0.0,
                                                'temperature':None,
-                                               'sum_delta_W':0.0}
+                                               'sum_delta_W':0.0,
+                                               'v_lambda':np.zeros(len(self.lambda_grid))}
         self.free_energy = None
         self.var_free_energy = None
         
         if block : 
-            self.data_babf_block : derivated_dic_babf = {'sum_w_AxU_dl':np.zeros(len(self.lambda_grid)),
+            self.data_babf_block : derivated_dic_babfKL = {'sum_w_AxU_dl':np.zeros(len(self.lambda_grid)),
                                                          'sum_w_AxU2_dl':np.zeros(len(self.lambda_grid)),
                                                          'sum_w_A': omega*np.ones(len(self.lambda_grid)),
                                                          'sum_pc_lam_q':np.zeros(len(self.lambda_grid)),
                                                          'pc_lam_q':np.zeros(len(self.lambda_grid)),
                                                          'compt':0.0,
                                                          'temperature':None,
-                                                         'sum_delta_W':None,
-                                                         'sum_jarzynski_work':np.zeros(len(self.lambda_grid)),
-                                                         'sum_jarzynski_work2':np.zeros(len(self.lambda_grid))}
+                                                         'sum_delta_W':0.0,
+                                                         'v_lambda':np.zeros(len(self.lambda_grid))}
             self.free_energy_block = None
         else : 
             self.data_babf_block = {}
@@ -81,9 +81,6 @@ class ResultsBABF:
     def update_temperature(self, temperature : float, block : bool = False) -> None :
         """Update temperature of the simulation for each step
         
-        Parameters
-        ----------
-
         temperatrure : float 
             Temperature of the system
 
@@ -100,16 +97,12 @@ class ResultsBABF:
     """FREE ENERGY DERIVATIVE UPDATE"""
     def update_data_babf(self, data : np.ndarray, data_key : str = 'sum_w_AxU_dl', block : bool = False) -> None : 
         """Update free energy object
-        
         Parameters 
         ----------
-        
         data : np.ndarray 
             data to add for ergodic average
-        
         data_key : str 
             name of data to update : sum_w_AxU_dl, sum_w_A, pc_lam_q
-        
         block : bool 
             key word for constrained babf method"""
         if block : 
@@ -122,7 +115,6 @@ class ResultsBABF:
         
         Returns
         -------
-        
         np.ndarray 
             \partial_{\lambda} A(\lambda) = \sum_{i}^{s} [ U(q_i,\lambda) - U_{ref}(q_i,\lambda) ] p_A(\lambda | q_i) / \sum_{i}^{s} p_A(\lambda | q_i)
         """
@@ -136,7 +128,6 @@ class ResultsBABF:
         
         Returns
         -------
-        
         np.ndarray 
         !!!!!! FORMULA IS WRONG !!!!!
             \partial_{\lambda} A(\lambda) = \sum_{i}^{s} [ U(q_i,\lambda) - U_{ref}(q_i,\lambda) ] p_A(\lambda | q_i) / \sum_{i}^{s} p_A(\lambda | q_i)
@@ -146,17 +137,14 @@ class ResultsBABF:
 
     def integration_scheme(self,x : np.ndarray, y : np.ndarray) -> np.ndarray :
         """Simpson scheme for integration  
-        
         Parameters
         ----------
         x : np.ndarray
-        
         y : np.ndarray 
             y = f(x)
 
         Returns 
         -------
-        
         float 
             int_{support(x)} f(x)dx 
 
@@ -166,19 +154,15 @@ class ResultsBABF:
     """MIXING METHODS"""
     def evaluate_U_lambda(self, reference_potential : float, lammps_potential : float) -> np.ndarray:
         """Build the mixing potential for TI
-        
         Parameters
         ----------
-        
         reference_potential : float
             U_{ref}(q)
-        
         lammps_potential : float 
             U(q)
 
         Returns 
         -------
-        
         np.ndarray
             Mixing potential array \lambda U(q) + (1 - \lambda) U_{ref}(q)       
 
@@ -187,19 +171,15 @@ class ResultsBABF:
 
     def evaluate_forces_lambda(self,f_reference : np.ndarray, f_lammps : np.ndarray) -> np.ndarray :
         """build the mixing force tensor for stochastic dynamic
-        
         Parameters
         ----------
-        
         f_reference : np.ndarray
             reference forces f_{ref}(q) 
-        
         f_lammps : np.ndarray 
             forces from lammps f(q)
 
         Returns 
         -------
-        
         np.ndarray : tensor shape is (Nat,3,len(lambda_grid))
             Mixing force array  F^{mix}_{\lambda}(q) = \lambda f(q) + (1 - \lambda) f_{ref}(q)        
         """
@@ -209,34 +189,36 @@ class ResultsBABF:
     """CANONICAL MEASURE METHODS"""
     def canonical_lambda_measure(self,temperature : float, potential : np.ndarray, free_energy : np.ndarray) -> np.ndarray :
         """Compute extended canonical measure for a given position 
-        
         Parameters
         ----------
-        
         temperature : float 
             Temperature of sampling
-        
         potential : np.ndarray 
             mixing potential energy depending on lambda (len(lambda_grid))
-        
         free energy : np.ndarray
             free energy estimator depending on lambda (len(lambda_grid))
 
         Returns 
         -------
-        
         np.ndarray
-            evaluation of the extended canonical measure  exp(- \beta [ U_lam(q) - A_lam ] )
+            evaluation of the extended canonical measure  exp(- \beta [ U_lam(q) - A^{eff}_lam ] )
+
+            with A^{eff}(\lambda) = A(\lambda) + \ln( v^{\lambda} ) + \ln( \Card{\Gamma} ) - \sum_{\lambda' \in \Gamma} \ln ( v^{\lambda'} ) /  \Card{\Gamma}
+
         """
-        
-        return np.exp(-(potential-free_energy)/(self.kB*temperature))
+
+
+        """Here cannical update take into account marginal variance """
+        sum_log_v = np.log(np.sum(self.data_babf['v_lambda']))
+        log_v_lambda = np.log(self.data_babf['v_lambda'])
+        effective_free_energy = free_energy + log_v_lambda + np.log(float(len(self.lambda_grid))) - sum_log_v/float(len(self.lambda_grid))
+
+        return np.exp(-(potential - effective_free_energy)/(self.kB*temperature))
 
     def Jarzynski_work_lambda(self, temperature : float, jar_work : float) -> np.ndarray :
         """Estimate extended p_A(lambda|q)
-        
         Parameters
         ----------
-        
         temperature : float 
             Temperature of sampling
         
@@ -246,30 +228,25 @@ class ResultsBABF:
 
         Returns 
         -------
-        
         np.ndarray
             evaluation of the extended  Jarzynski work exp(-\beta \lambda W_{Jar})"""
      
+        """here factorised by min exponent is needed to avoid overflow..."""
         return np.exp( -(jar_work*self.lambda_grid)/(self.kB*temperature) )
 
     def evaluate_conditional_p_lambda(self, temperature : float, potential : np.ndarray, free_energy : np.ndarray) -> np.ndarray :
         """Estimate extended p_A(lambda|q)
-        
         Parameters
         ----------
-        
         temperature : float 
             Temperature of sampling
-        
         potential : np.ndarray 
             mixing potential energy depending on lambda (len(lambda_grid))
-        
         free energy : np.ndarray
             free energy estimator depending on lambda (len(lambda_grid))
 
         Returns 
         -------
-        
         np.ndarray
             evaluation of the extended  p_A(lambda|q) = exp(- \beta [ U_lam(q) - A_lam ] ) / \int_{0}^{1} exp(- \beta [ U_lam'(q) - A_lam' ] ) dlam'
         """       
@@ -282,26 +259,20 @@ class ResultsBABF:
 
     def evaluate_conditional_p_lambda_constrained(self, temperature : float, potential : np.ndarray, potential_c : np.ndarray, free_energy_c : np.ndarray) -> np.ndarray :
         ## TO DO !
-        """Estimate extended p^c_A(lambda|q) 
-        
+        """Estimate extended p_A(lambda|q)
         Parameters
         ----------
-        
         temperature : float 
             Temperature of sampling
-        
         potential : np.ndarray 
             mixing potential energy depending on lambda (len(lambda_grid))
-        
         potential_c : np.ndarray 
             mixing constrained potential energy depending on lambda (len(lambda_grid))
-        
         free energy_c : np.ndarray
             constrained free energy estimator depending on lambda (len(lambda_grid))
 
         Returns 
         -------
-        
         np.ndarray
             evaluation of the extended  p^c_A(lambda|q) = exp(- \beta [ U_lam(q) - A^c_lam ] ) / \int_{0}^{1} exp(- \beta [ U^c_lam'(q) - A^c_lam' ] ) dlam'
         """       
@@ -316,52 +287,39 @@ class ResultsBABF:
     def evaluate_average_force(self,forces_lambda : np.ndarray, conditional_p_lambda : np.ndarray) -> np.ndarray :
         """Integrating the effective force over p_A(\lambda|q)
         ----------
-        
         forces_lambda : np.ndarray 
             Mixing force array  F^{mix}_{\lambda}(q) = \lambda f(q) + (1 - \lambda) f_{ref}(q)
-        
         conditional_p_lambda : np.ndarray 
             p_A(lambda|q) = exp(- \beta [ U_lam(q) - A_lam ] ) / \int_{0}^{1} exp(- \beta [ U_lam'(q) - A_lam' ] ) dlam'
 
         Returns 
         ------- 
-        
         np.ndarray
             F(q) the effective force for stochastic dynamics 
         """
         average_forces = np.zeros((forces_lambda.shape[0],forces_lambda.shape[1]))
-        #for k in range(forces_lambda.shape[0]):
-        #    for xi in range(forces_lambda.shape[1]):
-        #        product_k_xi = forces_lambda[k,xi,:]*conditional_p_lambda
-        #        int_simpson_k_xi = self.integration_scheme(self.lambda_grid,product_k_xi)
-        #        average_forces[k,xi] = int_simpson_k_xi
-        
-        """Fast implementation !"""
-        for xi in range(forces_lambda.shape[1]) :
-            int_simpson_f_xi = integrate.cumulative_simpson(forces_lambda[:,xi,:]*conditional_p_lambda, self.lambda_grid)
-            average_forces[:,xi] = int_simpson_f_xi
+        for k in range(forces_lambda.shape[0]):
+            for xi in range(forces_lambda.shape[1]):
+                product_k_xi = forces_lambda[k,xi,:]*conditional_p_lambda
+                int_simpson_k_xi = self.integration_scheme(self.lambda_grid,product_k_xi)
+                average_forces[k,xi] = int_simpson_k_xi
 
         return average_forces
 
 
     def evaluate_effective_forces_dynamic(self, f_reference : np.ndarray, f_lammps : np.ndarray, block : bool = False) -> np.ndarray :
         """Evaluate effective forces F(q) for stochastic dynamic 
-        
         Parameters
         ----------
-        
         f_reference : np.ndarray 
             forces from reference model : f_{ref}(q)
-        
         f_lammps : np.ndarray 
             forces from lammps potential : f(q)
-        
         block : bool 
             Key word for constrained BABF method
 
         Returns 
         ------- 
-        
         np.ndarray
             F(q) the effective force for stochastic dynamics 
         """       
@@ -374,10 +332,8 @@ class ResultsBABF:
     """FREE ENERGY ESTIMATIONS"""
     def evaluate_free_energy(self, block : bool = False) -> np.ndarray : 
         """Evaluate free energy by integration mean force over lambda
-        
         Parameters
         ----------
-        
         block : bool 
             Key word for constrained BABF method
         
@@ -400,10 +356,8 @@ class ResultsBABF:
 
     def evaluate_variance_free_energy(self) -> np.ndarray : 
         """Evaluate free energy by integration mean force over lambda
-        
         Parameters
         ----------
-        
         block : bool 
             Key word for constrained BABF method
         
@@ -449,7 +403,6 @@ class ResultsBABF:
         
         Parameters
         ----------
-        
         block : bool 
             Key word for block BABF method
 
@@ -466,7 +419,6 @@ class ResultsBABF:
         """return items for iteration
         Returns
         -------
-        
         dictionary.items()
         """
         return self.data_babf.items()
@@ -476,19 +428,16 @@ class ResultsBABF:
 
         Parameters
         ----------
-        
         key : str
             dictionary key
 
         Returns
         -------
-        
         Any
            dictionary value
         
         Raises
         ------
-        
         ValueError
             If key not found
         """
@@ -502,7 +451,6 @@ class ResultsBABF:
 
         Parameters
         ----------
-        
         key : str
         value : Any
         """
@@ -513,13 +461,11 @@ class ResultsBABF:
 
         Parameters
         ----------
-        
         key : str
            key query
 
         Returns
         -------
-        
         bool
             True if exists
         """
@@ -531,7 +477,6 @@ class ResultsBABF:
 
         Parameters
         ----------
-        
         dict : dict
         """
         for key,value in dict.items():
@@ -541,16 +486,13 @@ class ResultsBABF:
 
         Parameters
         ----------
-        
         keys : List[str]
             list of keys
-        
         blanks : None or str
             If not None, return str for missing key, default None
 
         Returns
         -------
-        
         dict
             dictionary with values determined from internal data
         """

@@ -2,6 +2,7 @@ import numpy as np
 import ase.neighborlist
 
 from ..mld import DBManager
+from ..tools.neighbour import get_N_neighbour_Cosmin
 from ase import Atoms
 
 from typing import List, Dict, Tuple, TypedDict, Optional
@@ -74,7 +75,7 @@ class FastEquivariantDescriptor :
                                                            pbc,
                                                            atoms.cell[:],
                                                            true_self_interaction=False)
-
+     
         _, count = np.unique(neighbors_ij[0,:], return_counts=True)
         size_neigh = np.amax(count)
         index_neighbour = np.empty((len(atoms),size_neigh), dtype=int)
@@ -83,6 +84,14 @@ class FastEquivariantDescriptor :
             index_neighbour[k,:] = np.resize(neighbors_ij[1,:][mask_atom_k], size_neigh)
 
         return index_neighbour
+
+    def _build_N_neighbour_fast(self, atoms : Atoms, N : int) -> np.ndarray : 
+        _, array_id = get_N_neighbour_Cosmin(atoms,
+                                             atoms,
+                                             atoms.cell[:],
+                                             self.rcut,
+                                             N)
+        return array_id
 
     def _build_local_equivariant_desc(self, descriptor : np.ndarray, sub_set_index : np.ndarray, desc_dim : int = None) -> np.ndarray :
         sub_set_desc = descriptor[np.unique(sub_set_index),:]
@@ -95,8 +104,16 @@ class FastEquivariantDescriptor :
         print(eig_val, len([eig for eig in eig_val if abs(eig) > 1e-10]))
         return eig_val
 
-    def _equivariant_desc_per_config(self, atoms : Atoms, descriptor : np.ndarray ) -> np.ndarray :
+    def _equivariant_desc_per_config(self, atoms : Atoms, descriptor : np.ndarray) -> np.ndarray :
         index_neighbour = self._build_N_neighbour(atoms, pbc = (True, True, True))
+        equivariant_desc_config = np.empty((descriptor.shape))
+        for id_k in range(len(index_neighbour)) : 
+            equivariant_desc_config[id_k,:] = self._build_local_equivariant_desc(descriptor, index_neighbour[id_k,:], desc_dim=None)
+        
+        return equivariant_desc_config
+
+    def _equivariant_desc_per_config_fast(self, atoms : Atoms, descriptor : np.ndarray, maxN : int = 30) -> np.ndarray :
+        index_neighbour = self._build_N_neighbour_fast(atoms, maxN)
         equivariant_desc_config = np.empty((descriptor.shape))
         for id_k in range(len(index_neighbour)) : 
             equivariant_desc_config[id_k,:] = self._build_local_equivariant_desc(descriptor, index_neighbour[id_k,:], desc_dim=None)

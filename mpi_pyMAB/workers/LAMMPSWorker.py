@@ -19,10 +19,13 @@ class LAMMPSWorker(BaseWorker):
 
         Parameters
         ----------
+        
         comm : MPI.Intracomm
             MPI communicator
-        parameters : PAFIParser
-            Predefined or custom PAFIParser object
+        
+        parameters : BABFParser
+            Predefined or custom BABFParser object
+        
         worker_instance : int
             unique worker rank
         """
@@ -71,9 +74,11 @@ class LAMMPSWorker(BaseWorker):
             
         Parameters
         ----------
+        
         key : str
             script key from XML
-        arguments : None | dict | ResultsHolder, optional
+        
+        arguments : None | dict | ResultsBABF, optional
             will be used to replace wildcards, by default None
         """
         if key in self.parameters.scripts:
@@ -107,22 +112,27 @@ class LAMMPSWorker(BaseWorker):
 
         Parameters
         ----------
+        
         name : str
             name of data
+        
         type : None | int, optional
             type of array, 0:integer or 1:double, by default None.
             If None, an attempt will be made to determine autonomously.
+        
         count : None | int, optional
             number of data per atom, by default None. 
             If None, an attempt will be made to determine autonomously.
 
         Returns
         -------
+        
         np.ndarray
             the LAMMPS data
 
         Raises
         ------
+        
         ValueError
             if name not found
         """
@@ -153,8 +163,10 @@ class LAMMPSWorker(BaseWorker):
 
         Parameters
         ----------
+        
         name : str
             name of array
+        
         data : np.ndarray
             numpy array of data. Will be flattened.
         """
@@ -176,6 +188,7 @@ class LAMMPSWorker(BaseWorker):
 
         Returns
         -------
+        
         int
             the atom count
         """
@@ -202,11 +215,13 @@ class LAMMPSWorker(BaseWorker):
 
         Parameters
         ----------
+        
         file_path : os.PathLike[str]
             Path to the LAMMPS .dat file.
 
         Returns
         -------
+        
         np.ndarray, shape (N,3)
             the positions
         """
@@ -228,13 +243,16 @@ class LAMMPSWorker(BaseWorker):
             id : str
         Parameters
         ----------
+        
         id : str
             compute id
+        
         vector : bool, optional
             is the return value a vector, by default True
 
         Returns
         -------
+        
         np.ndarray or float
            return data
         """
@@ -255,6 +273,7 @@ class LAMMPSWorker(BaseWorker):
         
         Returns
         -------
+        
         float
             The potential energy (pe)
         """
@@ -266,6 +285,7 @@ class LAMMPSWorker(BaseWorker):
         
         Returns
         -------
+        
         np.ndarray
             Lammps forces ! 
         """

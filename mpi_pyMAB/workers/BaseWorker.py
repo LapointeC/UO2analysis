@@ -8,19 +8,24 @@ from ..parsers.BaseParser import BaseParser
 class BaseWorker:
     """Basic PAFI Worker
 
-        Parameters
-        ----------
-        comm : MPI.Intracomm
-            MPI communicator
-        parameters : PAFIParser
-            Predefined or custom  PAFIParser object
-        worker_instance : int
-            unique worker rank
-        rank : int
-            global rank (for MPI safety)
-        roots : List[int]
-            list of master ranks  (for MPI safety)
-        """
+    Parameters
+    ----------
+    
+    comm : MPI.Intracomm
+        MPI communicator
+    
+    parameters : PAFIParser
+        Predefined or custom  PAFIParser object
+    
+    worker_instance : int
+        unique worker rank
+    
+    rank : int
+        global rank (for MPI safety)
+    
+    roots : List[int]
+        list of master ranks  (for MPI safety)
+    """
     def __init__(self, comm : MPI.Intracomm,
                  parameters:BaseParser,
                  worker_instance:int,
@@ -32,6 +37,8 @@ class BaseWorker:
         self.roots = roots
         self.rank = rank
         self.parameters = parameters
+        self.block = parameters['Block']
+        self.Jarzynski = parameters['Jarzynski']
         self.error_count = 0
         self.scale = np.ones(3)
         self.out_width=16
@@ -39,6 +46,7 @@ class BaseWorker:
         self.nlocal=0
         self.offset=0
         self.x : np.ndarray = None
+        self.previous_x : np.ndarray = None
         self.x_reference : np.ndarray = None
         self.v : np.ndarray = None
         self.force : np.ndarray = None
@@ -98,11 +106,13 @@ class BaseWorker:
         ----------
         X : np.ndarray, shape (natoms,3)
             configuration vector
+        
         central : bool, optional
             map scaled coordinates to [-.5,.5] if True, else [0,1], by default True
 
         Returns
         -------
+        
         np.ndarray
             wrapped vector
         """
@@ -118,15 +128,19 @@ class BaseWorker:
 
         Parameters
         ----------
+        
         temperature : float 
             Temperature of sampling
+        
         delta_t : float 
             Stochastic time step
+        
         shape : tuple 
             Shape of the resulting Wigner process (generally (Nat,3))
 
         Returns
         -------
+        
         np.darray 
             Sample in Wigner distribution
         """
@@ -138,6 +152,7 @@ class BaseWorker:
 
         Returns 
         -------
+        
         np.ndarray
             x center of mass
         """
@@ -155,6 +170,7 @@ class BaseWorker:
         
         Returns
         -------
+        
         float 
             maximum atomic displacement
         """

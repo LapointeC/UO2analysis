@@ -9,14 +9,19 @@ class Gatherer(BABFGatherer):
 
         Parameters
         ----------
+        
         params : PAFIParser
             Custom or predefined PAFIParser object
+        
         nWorkers : int
             total number of PAFI workers
+        
         rank : int
             global MPI rank
+        
         ensemble_comm : MPI.Intracomm
             MPI communicator to gather ensemble data
+        
         roots : List[int]
             list of root ranks for each worker. Only collate data here
             This should be depreceated asap

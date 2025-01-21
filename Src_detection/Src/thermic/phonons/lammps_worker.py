@@ -13,8 +13,8 @@ class LammpsWorker :
     def __init__(self, work_directory : os.PathLike[str], atoms : Atoms) -> None :
         """Init method for ```LammpsWorker```
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         work_directory : os.PathLike[str]
             Path to the working lammps directory 
@@ -33,8 +33,8 @@ class LammpsWorker :
                          name_lammps_file : os.PathLike[str] = 'in.lmp') -> None :
         """Generating inputs script for lammps calculations
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         kind_potential : str 
             Type of semi empirical potential
@@ -67,8 +67,8 @@ class LammpsWorker :
     def DumpAtomsSystem(self, name_file : str = 'in.lmp') -> None : 
         """Dump the geometry lammps file 
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
         
         name_file : os.PathLike[str]
             Path to the lammps geometry file
@@ -97,8 +97,8 @@ class LammpsWorker :
     def UpdateSystem(self, atoms : Atoms ) -> None :
         """Update ```Atoms``` system
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         atoms : Atoms 
             New ```Atoms``` system
@@ -120,8 +120,8 @@ class LammpsWorker :
     def Force_i_on_j(self, i : int, j : int, displacement : np.ndarray) -> np.ndarray : 
         """Compute atomic force due to atom i on atom j
         
-        Parameters:
-        -----------
+        Parameters
+        ----------
 
         i : int 
             Index of atom i

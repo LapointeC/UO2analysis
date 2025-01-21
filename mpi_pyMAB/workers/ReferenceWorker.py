@@ -17,10 +17,13 @@ class ReferenceWorker(BaseWorker):
 
         Parameters
         ----------
+        
         comm : MPI.Intracomm
             MPI communicator
+        
         parameters : PAFIParser
             Predefined or custom PAFIParser object
+        
         worker_instance : int
             unique worker rank
         """
@@ -57,6 +60,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns 
         ------- 
+        
         float
             reference Einstein energy : E_{eins}(q) = 1/2 \sum_{i=1}^N m_i*\omega^2 \Vert q_i - q_{i,ref} \Vert^2
         """ 
@@ -71,6 +75,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns 
         ------- 
+        
         float
             reference Einstein energy : E_{eins}(q) = 1/2 \sum_{i=1}^N m_i*\omega^2 \Vert q_i - q_{i,ref} \Vert^2
         """ 
@@ -83,6 +88,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns
         -------
+        
         float 
             Energy for reference system E_{ref}(q)
         """
@@ -103,6 +109,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns
         -------
+        
         np.ndarray
             Forces for reference system f_{ref}(q)
         """
@@ -123,6 +130,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns 
         ------- 
+        
         float
             potential temperature : T_{eins} =  E_{eins}(q)/(3NkB)
         """        
@@ -137,6 +145,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns
         -------
+        
         float 
             potential temperature
         """
@@ -158,6 +167,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns
         -------
+        
         np.ndarray
             Constrained external forces on the system f_{c}(q)
         """
@@ -173,10 +183,12 @@ class ReferenceWorker(BaseWorker):
         
         Parameters
         ----------
+        
         x : float 
 
         Returns
         -------
+        
         float
             phi(x)
 
@@ -188,6 +200,7 @@ class ReferenceWorker(BaseWorker):
         
         Returns 
         -------
+        
         np.ndarray 
             f_c(q)
         """
@@ -203,6 +216,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns
         -------
+        
         float 
             \int_0^x phi(x') dx'
         """
@@ -216,6 +230,7 @@ class ReferenceWorker(BaseWorker):
         
         Returns 
         -------
+        
         np.ndarray 
             f_c(q)
         """
@@ -231,6 +246,7 @@ class ReferenceWorker(BaseWorker):
 
         Returns
         -------
+        
         float
             Constrained external energy on the system U_{c}(q)
         """

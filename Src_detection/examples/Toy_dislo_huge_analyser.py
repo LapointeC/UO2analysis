@@ -9,7 +9,7 @@ from ase import Atoms, Atom
 sys.path.insert(0,'../')
 from Src import DislocationObject, DfctAnalysisObject, \
                   FrameOvito, NaiveOvitoModifier, \
-                  timeit, get_N_neighbour
+                  timeit
 
 from ovito.io.ase import ase_to_ovito
 from ovito.pipeline import Pipeline, PythonSource, StaticSource
@@ -151,8 +151,8 @@ class ToyDislocationAnalyser :
         self.dislocation_object.StartingPointCluster()
         print('... Starting ordering line ...')
         _ = self.dislocation_object.BuildOrderingLine(array_neigh_ext,scale_cluster,descriptor=None,idx_neighbor=index_neigh_ext)
-        tmp_atoms = self.dislocation_object.LineSmoothing(nb_averaging_window=nb_averaging_window)
-        self.dislocation_object.ComputeBurgerOnLineSmooth(rcut_burger, nye, descriptor=None)
+        _ = self.dislocation_object.LineSmoothing(nb_averaging_window=nb_averaging_window)
+        tmp_atoms = self.dislocation_object.ComputeBurgerOnLineSmooth(rcut_burger, nye, descriptor=None)
         
         return idx_list, tmp_atoms
 
@@ -166,11 +166,11 @@ outliers_idx = dislocation_finder.get_outliers(rcut=3.2)
 print('... Building extended neighborhood')
 extended_outlier, full_outlier = dislocation_finder.build_extended_neigh_(outliers_idx, rcut_extended=5.5, rcut_full=8.0)
 print('... Starting analysis ...')
-sample_id, line_atoms = dislocation_finder.perform_dislocation_analysis(3.1855*np.eye(3),
+sample_id, line_atoms = dislocation_finder.perform_dislocation_analysis(3.1882*np.eye(3),
                                                                         rcut_dislo=4.5,
                                                                         rcut_line=4.5,
                                                                         rcut_cluster=6.0,
-                                                                        scale_cluster=2.5,
+                                                                        scale_cluster=4.0,
                                                                         nb_averaging_window=6,
                                                                         rcut_burger=5.0)
 # put into np.array for visualisation
@@ -180,10 +180,11 @@ frame_object = FrameOvito([dislocation_finder.dislocation])
 naive_modifier = NaiveOvitoModifier(dict_color={'firebrick':extended_outlier,
                                                 'blue':outliers_idx,
                                                 'royalblue':outliers_idx[sample_id]},
-                                    dict_transparency={0.9:extended_outlier,
-                                                        0.7:outliers_idx,  
-                                                        0.0:outliers_idx[sample_id]},
-                                    array_line=[ line_atom.positions for line_atom in line_atoms ])
+                                    dict_transparency={0.95:extended_outlier,
+                                                        0.85:outliers_idx,  
+                                                        0.4:outliers_idx[sample_id]},
+                                    array_line=[ line_atom.positions for line_atom in line_atoms ],
+                                    array_caracter=[ line_atom.get_array('caracter') for line_atom in line_atoms ])
 
 pipeline_config = Pipeline(source = PythonSource(delegate=frame_object))
 pipeline_config.modifiers.append(naive_modifier.BuildArrays)

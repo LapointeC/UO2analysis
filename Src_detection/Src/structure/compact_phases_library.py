@@ -36,7 +36,10 @@ class Octa :
 
 class MetaOctahedron:
     """Build all possible types of ```Octa``` to build ```C15``` clusters
-    
+
+    ! WARNING ! All ```C15``` octahedron properties are writen in half lattice units !
+
+
     Implemented type :
         - ```type1```
         - ```type2```
