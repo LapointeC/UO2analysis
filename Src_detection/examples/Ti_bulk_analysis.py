@@ -80,7 +80,7 @@ else :
     print('... Starting from the previous pickle file ...')
     previous_dbmodel = pickle.load(open(pickle_data_file,'rb'))
     analysis_mcd = MCDAnalysisObject(previous_dbmodel)
-    analysis_mcd.perform_mcd_analysis('Ti',contamination=0.05, nb_selected=10000)
+    analysis_mcd.fit_mcd_envelop('Ti',contamination=0.05, nb_selected=10000)
     print()
     print('... Writing pickle object ...')
     pickle.dump(analysis_mcd, open(pickle_model_file,'wb'))

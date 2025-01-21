@@ -1,7 +1,8 @@
 import numpy as np
 
 import random
-from ase import Atoms, Atom
+import os
+from ase import Atoms
 
 from ..metrics import MCDModel, GMMModel, PCAModel
 from ..mld import DBManager
@@ -10,6 +11,7 @@ from ..tools import timeit
 
 import scipy.stats
 import matplotlib
+import pickle
 matplotlib.use('Agg')
 
 from typing import List, Dict, TypedDict
@@ -148,6 +150,30 @@ class MCDAnalysisObject :
 
                 self.dic_class[key_dic] = dic_species
 
+
+    def store_model_pickle(self, path_pkl : os.PathLike[str],
+                         model_kind : str = '') -> None :
+        """Build agnostically the pickle file for model
+        
+        Parameters
+        ----------
+
+        path_pkl : os.PathLike[str]
+            Path to the pickle file to write 
+
+        model_kind : str 
+            Name of the model to store in the pickle file
+        """
+        implemented_models = ['mcd_model', 'gmm_model', 'pca_model']
+        if model_kind == '' : 
+            for model in implemented_models :
+                if len(self.__dict__[model].models) > 0 :
+                    model_kind = model 
+                    break 
+                    
+        pickle.dump(self.__dict__[model_kind], open(path_pkl,'wb'))
+        return 
+
     def _get_all_atoms_species(self, species : str) -> List[Atoms] : 
         """Create the full list of Atoms for a given species
         
@@ -169,7 +195,7 @@ class MCDAnalysisObject :
         return list_atoms_species
 
 
-    def perform_mcd_analysis(self, species : str, contamination : float = 0.05, nb_bin = 100, nb_selected=10000) -> None : 
+    def fit_mcd_envelop(self, species : str, contamination : float = 0.05, nb_bin = 100, nb_selected=10000) -> None : 
         """Perform MCD analysis for a given species
         
         TODO write doc
@@ -228,7 +254,7 @@ class MCDAnalysisObject :
 
         plt.savefig('{:s}_distribution_analysis.pdf'.format(species),dpi=300)
 
-    def perform_gmm_analysis(self, species : str, nb_bin_histo : int =100, nb_selected :int = 10000, dict_gaussian : dict = {'n_components':2,
+    def fit_gmm_envelop(self, species : str, nb_bin_histo : int =100, nb_selected :int = 10000, dict_gaussian : dict = {'n_components':2,
                                                             'covariance_type':'full',
                                                             'init_params':'kmeans'}) -> None : 
         """Perform MCD analysis for a given species

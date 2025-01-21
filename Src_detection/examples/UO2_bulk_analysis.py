@@ -78,17 +78,17 @@ else :
     analysis_mcd = MCDAnalysisObject(previous_dbmodel)
 
     if metric_type == 'mcd' : 
-        analysis_mcd.perform_mcd_analysis('U',contamination=0.05)
-        analysis_mcd.perform_mcd_analysis('O',contamination=0.05)
+        analysis_mcd.fit_mcd_envelop('U',contamination=0.05)
+        analysis_mcd.fit_mcd_envelop('O',contamination=0.05)
     
     elif metric_type == 'gmm' :
-        analysis_mcd.perform_gmm_analysis('U',nb_bin_histo=100,nb_selected=2000,dict_gaussian={'n_components':3,
+        analysis_mcd.fit_gmm_envelop('U',nb_bin_histo=100,nb_selected=2000,dict_gaussian={'n_components':3,
                                                                 'covariance_type':'full',
                                                                 'init_params':'k-means++', 
                                                                 'max_iter':100,
                                                                 'weight_concentration_prior_type':'dirichlet_process',
                                                                 'weight_concentration_prior':0.8})
-        analysis_mcd.perform_gmm_analysis('O',nb_bin_histo=100,nb_selected=2000,dict_gaussian={'n_components':3,
+        analysis_mcd.fit_gmm_envelop('O',nb_bin_histo=100,nb_selected=2000,dict_gaussian={'n_components':3,
                                                                 'covariance_type':'full',
                                                                 'init_params':'k-means++', 
                                                                 'max_iter':100,
