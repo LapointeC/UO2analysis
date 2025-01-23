@@ -1,2 +1,3 @@
 from .dfct_analysis import DfctAnalysisObject
+from .dfct_multi_model_analysis import DfctMultiAnalysisObject
 from .library_mcd import NormDescriptorHistogram, MCDAnalysisObject
