@@ -3,10 +3,12 @@ from ase.lattice.tetragonal import SimpleTetragonal
 from ase.lattice.triclinic import TriclinicFactory
 from ase.lattice.hexagonal import Hexagonal, HexagonalClosedPacked
 from ase.lattice.cubic import FaceCenteredCubicFactory, SimpleCubicFactory
+from ..tools.neighbour import get_N_neighbour_Cosmin
 
 import warnings
+import numpy as np
 from ase import Atoms
-from typing import List
+from typing import List, Tuple, Dict
 
 class A15Factory(SimpleCubicFactory):
         """A factory for A15 lattices."""
@@ -111,3 +113,93 @@ class SolidAse(object):
                                   latticeconstant=self.lattice_cube)
 
         return atoms
+
+class NeighboursCoordinates : 
+    def __init__(self, structure : str = 'BCC',
+                       rcut : float = 4.0,
+                       size : Tuple[int] = (5,5,5)) -> None :
+        """Little class to generate neighbour coordinate (in unit vector) for usual cirstallographic structure
+        This class can be used to parametrise the Nye tensor calculations for dislocation analysis
+
+        Parameters
+        ----------
+
+        structure : str 
+            Cristallographic structure to consider
+
+        rcut : float 
+            Cutoff radius for neighbour calculations
+
+        size : Tuple[int] 
+            Size of the system to consider for neighbours construction
+        """
+        self.structure = structure
+        self.rcut = rcut
+
+        solide_ase = SolidAse(size, 'Kr',1.0)
+        self.lattice_structure = solide_ase.structure(self.structure)
+
+    def BuildNeighboursCoordinates(self, Nneigh : int = 100,
+                                   shell : int = 3,
+                                   threshold : float = 0.1) ->  Tuple[Dict[str, np.ndarray], np.ndarray] :
+        """Build the array of neighbour coordinates
+        
+        Parameters
+        ----------
+
+        Nneigh : int 
+            Total numbers of neighbours for shell constructions
+
+        shell : int 
+            Number of shell build
+
+        threshold : float 
+            Threshold in |d_ij|^2 for increment a new shell
+
+
+        Returns 
+        -------
+
+        Dict[str, np.ndarray]
+            Dictionnary of shells {shell i: corresponding neighour array (Nshell,3) in shell i}
+
+        np.ndarray 
+            Concatenate neigbour coordinates array (sum_{i=1}^shell Nshell_i,3)
+        """
+
+        array_neigh, _ = get_N_neighbour_Cosmin(self.lattice_structure,
+                                                self.lattice_structure,
+                                                self.lattice_structure.cell[:],
+                                                self.rcut,
+                                                Nneigh)
+        dic_shell = {}
+        full_neigh = None 
+
+        local_neigh = array_neigh[0,:]
+        local_shell_compt = 1
+        for neigh in local_neigh : 
+            if len(dic_shell) == 0 : 
+                dic_shell[f'shell{local_shell_compt}'] = neigh.reshape(1,-1)
+                full_neigh = neigh.reshape(1,-1)
+            
+            else : 
+                neigh_shell = dic_shell[f'shell{local_shell_compt}'] 
+                neigh = neigh.reshape(1,-1)
+                array_distance_shell = np.sum(neigh_shell**2, axis=1)
+                distance = np.sum(neigh**2, axis=1)
+                
+                # append case !
+                if (np.abs(array_distance_shell - distance) < threshold).all() : 
+                    dic_shell[f'shell{local_shell_compt}'] = np.concatenate( (dic_shell[f'shell{local_shell_compt}'], neigh), axis=0 )
+
+                # add new shell
+                else : 
+                    local_shell_compt += 1
+                    if local_shell_compt > shell :
+                        break
+                    else : 
+                        dic_shell[f'shell{local_shell_compt}'] = neigh
+
+                full_neigh = np.concatenate((full_neigh, neigh), axis=0)
+
+        return dic_shell, full_neigh

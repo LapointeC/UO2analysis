@@ -7,6 +7,7 @@ from .cluster import ClusterDislo, LocalLine
 import numpy as np
 from scipy.spatial import ConvexHull
 from ..tools import get_N_neighbour, merge_dict_
+from ..structure import NeighboursCoordinates
 
 from ovito.io.ase import ase_to_ovito
 from ovito.pipeline import Pipeline, PythonSource, StaticSource
@@ -64,7 +65,8 @@ class DislocationObject :
                 structure : reference_structure = {'structure':'bcc',
                                                    'unit_cell':3.1855*np.eye(3)},
                 kind_neigh : str = 'fast-pbc',
-                neigh_factor : float = 5.0) -> None : 
+                neigh_factor : float = 5.0,
+                shell_number : int = None) -> None : 
         """Init method for ```DislocationObject```. Nye tensor calculation needs to used two buffer region for the system
         which are called ```extended_system``` and ```full_system```. Rigourisly only ```extended_system``` is needed to compute deformation
         tensor and ```full_system``` is need to evaluate gradient of the deformation tensor needed to estimate Nye tensor !
@@ -93,6 +95,10 @@ class DislocationObject :
         
         neigh_factor : float 
             Rescaling factor for Burger vector computation, normalised the value of volume integration
+
+        shell_number : int 
+            Number of neighbour shell to take into account during the Nye tensor computation
+            Default options are tabulated 
         """
 
         self.system = system
@@ -119,6 +125,19 @@ class DislocationObject :
                                   [ 0.28867513,  0.5 , -0.815 ], [ 0.28867513, -0.5 , -0.815 ], [-0.8660254,  0.5 , 0.0] , [-0.8660254, -0.5 ,  0.0], [ 0., -1.,  0.0],
                                   [0.8660254, 0.5 , 0.0], [ 0.8660254, -0.5 ,  0.0], [-0.57735027, 1.0 ,  0.815 ], [-0.57735027,  1.0 , -0.815 ], [ 1.15470054, 0.0 , -0.815 ], 
                                   [1.15470054, 0.0, 0.815]  ])
+
+        # Here is the general method to generate neighbours vectors (in unit coordinate) for a given number of shell
+        if shell_number is not None : 
+            structure = ['BCC','FCC','HCP']
+            dict_equiv = {'BCC':'p_vector_bcc',
+                          'FCC':'p_vector_fcc',
+                          'HCP':'p_vector_hcp'}
+
+            for lattice in structure : 
+                lattice_neigh_coordinates = NeighboursCoordinates(lattice)
+                _, neigh = lattice_neigh_coordinates.BuildNeighboursCoordinates(Nneigh=80,
+                                                                                shell=shell_number)
+                self.__dict__[dict_equiv[lattice]] = neigh
 
         self.kind_neigh = kind_neigh
         self.neigh_factor = neigh_factor
