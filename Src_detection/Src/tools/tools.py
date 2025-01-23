@@ -4,20 +4,20 @@ import numpy as np
 from typing import List, Dict
 from difflib import SequenceMatcher
 
-def BuildingFunction(path_dir : str) -> List[str] :
+def BuildingFunction(path_dir : os.PathLike[str]) -> List[os.PathLike[str]] :
     """Build the list of directories from an initial directory
 
     Parameters 
     ----------
 
-    Path_dir : str
+    Path_dir : os.PathLike[str]
         Path to the initial directory
 
     
     Returns 
     -------
 
-    List[str]
+    List[os.PathLike[str]]
         List of child directory from initial directory
 
     
@@ -25,16 +25,16 @@ def BuildingFunction(path_dir : str) -> List[str] :
     return [dir for dir in os.listdir(path_dir) if os.path.isdir('%s/%s'%(path_dir,dir)) ]
 
 
-def RecursiveCheck(path : str, list : List[str], file2find : str = 'OUTCAR') -> None :
+def RecursiveCheck(path : os.PathLike[str], list : List[os.PathLike[str]], file2find : str = 'OUTCAR') -> None :
     """ This function builds recursively the list of path containing file2find
     
     Parameters 
     ----------
 
-    path : str
+    path : os.PathLike[str]
         Initial path to check
 
-    list : List[str]
+    list : List[os.PathLike[str]]
         List which is built recursively to contain the list of path containing file2find
     
     file2find : str 
@@ -50,13 +50,13 @@ def RecursiveCheck(path : str, list : List[str], file2find : str = 'OUTCAR') -> 
             new_path = '%s/%s'%(path,el)
             RecursiveCheck(new_path,list,file2find)
 
-def RecursiveBuilder(root_dir_check : str, file2find : str = 'OUTCAR') -> List[str] :
+def RecursiveBuilder(root_dir_check : os.PathLike[str], file2find : str = 'OUTCAR') -> List[str] :
     """Build recursively the list of all file2find paths
     
     Parameters 
     ----------
 
-    root_dir_check : str
+    root_dir_check : os.PathLike[str]
         Root of all paths to check
 
     file2find : str
@@ -75,7 +75,30 @@ def RecursiveBuilder(root_dir_check : str, file2find : str = 'OUTCAR') -> List[s
     return list_path_outcar
 
 
-def nearest_mode(list_mode,mode,nb_poss):
+def nearest_mode(list_mode : List[str],
+                 mode : str,
+                 nb_poss : int) -> List[str]:
+    """Naive function based on string metric to find nearest mode to a reference subset
+    
+    Parameters
+    ----------
+
+    list_mode : List[str]
+        List of reference mode
+
+    mode : str
+        Mode to compare with references
+
+    nb_poss : int 
+        Number of closest mode in reference mode to print
+
+    Returns 
+    -------
+
+    List[str]
+        List of nearest modes found based on string metric
+        
+    """
     list_score = []
     for mode_implemented_i in list_mode :
         score_i = 0.0
