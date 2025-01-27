@@ -883,7 +883,64 @@ class DfctMultiAnalysisObject :
                                          params_dislocation['smoothing_line'])
 
         return
+
+    def PointDefectAnalysisFunction(self, atoms : Atoms,
+                           selection_funct : function, 
+                           function_dictionnary : Dict[str,Any],
+                           kind : str = 'vacancy',
+                           elliptic : str = 'iso') -> None : 
+        """Brut force analysis to localised point defect based on given selection function
         
+        Parameters
+        ----------
+
+        atoms : Atoms 
+            Atoms object to analyse 
+
+        selection_funct : function
+            Selection function for defects
+
+        function_dictionnary : Dict[str,Any]
+            Dictionnary containing selection data for defect (see examples)
+
+        kind : str
+            Type of defect
+
+        elliptic : str 
+            Type of cluster aggregation (iso => isotropic, aniso => anisotropic)
+
+        """
+
+        #sanity check 
+        if kind not in self.dfct.keys() : 
+            raise NotImplementedError(f'... Looking for not implemented defect : {kind} ...')
+
+        dictionnary_methods = {'vacancy': lambda a, array, rcut, elliptic: self.update_dfct('vacancy',a,
+                                                                                            array_property=array, 
+                                                                                            rcut=rcut,
+                                                                                            elliptic=elliptic),
+                               'interstitial': lambda a, array, rcut, elliptic: self.update_dfct('interstitial',a,
+                                                                                            array_property=array, 
+                                                                                            rcut=rcut,
+                                                                                            elliptic=elliptic),    
+                               'C15': lambda a, array, rcut, e : self.update_nanophase('C15',a,
+                                                                                    array_property=array,
+                                                                                    rcut=rcut),
+
+                               'A15': lambda a, array, rcut, e : self.update_nanophase('A15',a,
+                                                                                    array_property=array,
+                                                                                    rcut=rcut)}
+
+        selected_idx = selection_funct(atoms,function_dictionnary)
+        full_properties = {key:atoms.get_array(key) for key in function_dictionnary}
+
+        for id_atom in selected_idx :  
+            atom = atoms[id_atom]
+            array_properties = {key:full_properties[key][id_atom,:] for key in function_dictionnary}
+            dictionnary_methods[kind](atom, array_properties, 4.0, elliptic)
+
+        return 
+
 ###########################################
 #### WRITING PART 
 ###########################################

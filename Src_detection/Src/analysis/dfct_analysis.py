@@ -6,7 +6,7 @@ import more_itertools
 from ase import Atoms, Atom
 from typing import Dict, List, Any, Tuple
 from ..metrics import MCDModel, GMMModel, PCAModel, LogisticRegressor
-from ..clusters import Cluster, ClusterDislo, DislocationObject, reference_structure
+from ..clusters import Cluster, ClusterDislo, NanoCluster, DislocationObject, reference_structure
 from ..mld import DBManager
 from ..tools import timeit, build_extended_neigh_
 
@@ -28,19 +28,6 @@ class DfctAnalysisObject :
 
         self.dfct : Dict[str, Dict[int, Cluster | ClusterDislo]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
         self.mean_atomic_volume = None 
-
-        #def fill_dictionnary(key : str, at : Atom, id_at : int, descriptors : np.ndarray, extended_properties : List[str], dic : Dict[str,List[Atoms]]) -> None : 
-        #    """TODO write doc"""
-        #    atoms = Atoms([at])          
-        #    atoms.set_array('milady-descriptors',descriptors[id_at,:].reshape(1,descriptors.shape[1]), dtype=float)
-        #    if extended_properties is not None : 
-        #        for property in extended_properties : 
-        #            property_value = dbmodel.model_init_dic[key]['atoms'].get_array(property)[id_at]
-        #            atoms.set_array(property,
-        #                            property_value.reshape(1,),
-        #                            dtype=float)
-        #        dic[at.symbol] += [atoms]
-        #    return 
 
         def fill_dictionnary_fast(ats : Atoms, dic : Dict[str,List[Atoms]]) :
             symbols = ats.get_chemical_symbols()
@@ -396,7 +383,7 @@ class DfctAnalysisObject :
         for s in species : 
             mask_s = list(map( lambda b : b == s, full_species))
             mcd_s = self.mcd_model.models[s]['mcd'].mahalanobis(descriptor[mask_s]) 
-            proba_s = self.mcd_model.models[s]['distribution'].score(mcd_s)
+            proba_s = self.mcd_model.models[s]['distribution'].score(mcd_s.reshape(-1,1))
 
             full_array_mcd[mask_s] = mcd_s
             full_array_proba[mask_s] = proba_s
@@ -649,6 +636,44 @@ class DfctAnalysisObject :
                 next_index = max([int(key) for key in self.dfct[key_dfct].keys()]) + 1
                 self.dfct[key_dfct][next_index] = Cluster(atom, rcut, array_property=array_property) 
 
+    def update_nanophase(self, key_dfct : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0) -> None :
+        """Method to update defect inside dictionnary
+        
+        Parameters
+        ----------
+
+        key_dfct : str 
+            Type of defect to update (this method manage only ```vacancy``` and ```interstitial```)
+
+        atom : Atom
+            Atom object to update in a ```Cluster``` object
+
+        array_property : Dict[str,Any]
+            Dictionnnary which contains additional data about atom in the cluster (atomic volume, mcd distance ...)
+
+        rcut : float 
+            Cut off raduis used as initial size for new ```Cluster```
+
+        elliptic : str 
+            Type of size estimation for ```Cluster```. 
+            ```iso``` : isotropic cluster 
+            ```aniso``` : elliptic cluster
+
+        """
+        if self.dfct[key_dfct] == {} : 
+            self.dfct[key_dfct][0] = NanoCluster(atom, rcut, array_property=array_property)
+        
+        else : 
+            key_closest = np.argmin([np.linalg.norm( atom.position - cluster.center) for _, cluster in self.dfct[key_dfct].items()])
+            key_closest = [key for key in self.dfct[key_dfct]][key_closest]
+            if self.dfct[key_dfct][key_closest].get_elliptic_distance(atom) < 1.5 :
+                self.dfct[key_dfct][key_closest].append(atom, array_property=array_property, elliptic = 'iso')
+            
+            else : 
+                next_index = max([int(key) for key in self.dfct[key_dfct].keys()]) + 1
+                self.dfct[key_dfct][next_index] = NanoCluster(atom, rcut, array_property=array_property) 
+
+
     def _aggregate_cluster(c1 : Cluster, c2 : Cluster) -> Cluster : 
         """Local method to aggregate two ```Cluster``` objects
         
@@ -840,7 +865,64 @@ class DfctAnalysisObject :
                                          params_dislocation['smoothing_line'])
 
         return
+
+    def PointDefectAnalysisFunction(self, atoms : Atoms,
+                           selection_funct : function, 
+                           function_dictionnary : Dict[str,Any],
+                           kind : str = 'vacancy',
+                           elliptic : str = 'iso') -> None : 
+        """Brut force analysis to localised point defect based on given selection function
         
+        Parameters
+        ----------
+
+        atoms : Atoms 
+            Atoms object to analyse 
+
+        selection_funct : function
+            Selection function for defects
+
+        function_dictionnary : Dict[str,Any]
+            Dictionnary containing selection data for defect (see examples)
+
+        kind : str
+            Type of defect
+
+        elliptic : str 
+            Type of cluster aggregation (iso => isotropic, aniso => anisotropic)
+
+        """
+
+        #sanity check 
+        if kind not in self.dfct.keys() : 
+            raise NotImplementedError(f'... Looking for not implemented defect : {kind} ...')
+
+        dictionnary_methods = {'vacancy': lambda a, array, rcut, elliptic: self.update_dfct('vacancy',a,
+                                                                                            array_property=array, 
+                                                                                            rcut=rcut,
+                                                                                            elliptic=elliptic),
+                               'interstitial': lambda a, array, rcut, elliptic: self.update_dfct('interstitial',a,
+                                                                                            array_property=array, 
+                                                                                            rcut=rcut,
+                                                                                            elliptic=elliptic),    
+                               'C15': lambda a, array, rcut, e : self.update_nanophase('C15',a,
+                                                                                    array_property=array,
+                                                                                    rcut=rcut),
+
+                               'A15': lambda a, array, rcut, e : self.update_nanophase('A15',a,
+                                                                                    array_property=array,
+                                                                                    rcut=rcut)}
+
+        selected_idx = selection_funct(atoms,function_dictionnary)
+        full_properties = {key:atoms.get_array(key) for key in function_dictionnary}
+
+        for id_atom in selected_idx :  
+            atom = atoms[id_atom]
+            array_properties = {key:full_properties[key][id_atom,:] for key in function_dictionnary}
+            dictionnary_methods[kind](atom, array_properties, 4.0, elliptic)
+
+        return 
+
 ###########################################
 #### WRITING PART 
 ###########################################
