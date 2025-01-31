@@ -1,7 +1,6 @@
 import os
 import pickle
 import numpy as np
-from sklearn.covariance import MinCovDet
 from sklearn.neighbors import KernelDensity
 
 from ..tools import timeit
@@ -9,17 +8,18 @@ from ..tools import timeit
 from ase import Atoms
 from typing import TypedDict, List, Dict
 
-class MCD(TypedDict) : 
-    mcd : MinCovDet
+class Mahalanobis(TypedDict) :
+    mean_vector : np.ndarray
+    inv_covariance_matrix : np.ndarray 
     distribution : KernelDensity
 
-class MCDModel :
+class MahalanobisModel : 
     def __init__(self, path_pkl : os.PathLike[str] = 'Nothing') : 
         if os.path.exists(path_pkl) : 
             self._load_pkl(path_pkl)
         else : 
-            self.models : Dict[str, MCD] = {}
-            self.name = 'MCD'
+            self.models : Dict[str, Mahalanobis] = {}
+            self.name = 'Mahalanobis'
 
     def _update_name(self, name : str) -> None : 
         """Update name of ```MCDModel```
@@ -34,7 +34,7 @@ class MCDModel :
         self.name = name 
         return 
 
-    def _fit_mcd_model(self, desc_selected : np.ndarray, species : str, contamination : float = 0.05) -> None : 
+    def _fit_mahalanobis_model(self, desc_selected : np.ndarray, species : str) -> None : 
         """Build the mcd model for a given species
         
         Parameters
@@ -46,18 +46,21 @@ class MCDModel :
         species : str
             Selected species 
 
-        contamination : float
-            percentage of outlier for mcd hyper-elliptic envelop fitting
-
         """
-        self.models[species] = {'mcd':None,
+        self.models[species] = {'mean_vector':None,
+                                'covariance_matrix':None,
                                 'distribution':None}
-        self.models[species]['mcd'] = MinCovDet(support_fraction=1.0-contamination)
-        self.models[species]['mcd'].fit(desc_selected)
         
+        mean_vector = desc_selected.mean(axis=0)
+        desc_selected += - mean_vector
+        cov_desc = np.cov(desc_selected.T)
+        inv_covmat = np.linalg.pinv(cov_desc)
+
+        self.models[species]['mean_vector'] = mean_vector
+        self.models[species]['inv_covariance_matrix'] = inv_covmat
         return 
     
-    def _fit_mcd_distribution(self, mcd_distances : np.ndarray, species : str) -> None :
+    def _fit_mahalanobis_distribution(self, mcd_distances : np.ndarray, species : str) -> None :
         """Build KDE estimation for a given species
         
         Parameters
@@ -74,7 +77,7 @@ class MCDModel :
         self.models[species]['distribution'].fit(mcd_distances.reshape(len(mcd_distances),1))
         return 
     
-    def _predict_mcd_probability(self, mcd_distances : np.ndarray, species : str) -> np.ndarray : 
+    def _predict_mahalanobis_probability(self, mcd_distances : np.ndarray, species : str) -> np.ndarray : 
         """Compute probability of a given mcd_distances vector based on MCD distances kde estimation
         
         Parameters
@@ -94,7 +97,7 @@ class MCDModel :
         """     
         return self.models[species]['distribution'].score(mcd_distances.reshape(len(mcd_distances),1))
 
-    def _get_mcd_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
+    def _get_mahalanobis_distance(self, list_atoms : List[Atoms], species : str) -> List[Atoms] :
         """Compute mcd distances based for a given species and return updated Atoms objected with new array : mcd-distance
         
         Parameters
@@ -111,14 +114,18 @@ class MCDModel :
         --------
 
         List[Atoms]
-            Updated List of Atoms with the new array "mcd-distance"
+            Updated List of Atoms with the new array "mahalanobis-distance-name"
         """
         
-        def local_setting_mcd(atoms : Atoms) -> None : 
-            mcd_distance = self.models[species]['mcd'].mahalanobis(atoms.get_array('milady-descriptors'))
-            atoms.set_array(f'mcd-distance-{self.name}',np.sqrt(mcd_distance), dtype=float)
+        def local_setting_mahalanobis(atoms : Atoms) -> None : 
+            mean_vector = self.models[species]['mean_vector']
+            inv_covariance = self.models[species]['inv_covariance_matrix']
+            desc = atoms.get_array('milady-descriptors')
 
-        [local_setting_mcd(atoms) for atoms in list_atoms]
+            mcd_distance = np.sqrt( np.trace( ( desc - mean_vector )@inv_covariance@( desc.T - mean_vector ) ) )
+            atoms.set_array(f'mahalanobis-distance-{self.name}',np.sqrt(mcd_distance), dtype=float)
+
+        [local_setting_mahalanobis(atoms) for atoms in list_atoms]
 
         return list_atoms
     

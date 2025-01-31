@@ -1,9 +1,10 @@
-from .analysis import DfctAnalysisObject, DfctMultiAnalysisObject, NormDescriptorHistogram, MCDAnalysisObject
+from .analysis import DfctAnalysisObject, DfctMultiAnalysisObject, NormDescriptorHistogram, MCDAnalysisObject, MetricAnalysisObject, ReferenceBuilder
 from .clusters import Cluster, ClusterDislo, DislocationObject
 from .mld import Milady, DBDictionnaryBuilder, GenerateMiladyInput, DBManager, Optimiser, Regressor, Descriptor, DescriptorsHybridation, write_milady_poscar
 from .tools import FrameOvito, NaiveOvitoModifier, MCDModifier, LogisticModifier, my_cfg_reader, timeit, DataPhondy, RecursiveCheck, RecursiveBuilder, nearest_mode, get_N_neighbour, build_extended_neigh_
 from .thermic import HarmonicThermicGenerator, ThermicSampling, ThermicFiting, FastEquivariantDescriptor
 from .metrics import PCA_, PCAModel, MCD, MCDModel, Logistic, LogisticRegressor, GMM, GMMModel
+from .parser import BaseParser
 from .structure import SolidAse, DislocationsBuilder, C15Builder, A15Builder, InputsDictDislocationBuilder, InputsCompactPhases, NeighboursCoordinates
 try :
     from .surface import NearestMode, SurfaceParser, AseVaspParser, CompositionFromBulk, BuilderSurfaceOriented, SetupVaspASE, WritingSlurm, \

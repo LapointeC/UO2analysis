@@ -867,7 +867,7 @@ class DfctAnalysisObject :
         return
 
     def PointDefectAnalysisFunction(self, atoms : Atoms,
-                           selection_funct : function, 
+                           selection_funct, 
                            function_dictionnary : Dict[str,Any],
                            kind : str = 'vacancy',
                            elliptic : str = 'iso') -> None : 

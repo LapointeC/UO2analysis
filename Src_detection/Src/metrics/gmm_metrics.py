@@ -68,7 +68,7 @@ class GMMModel :
         self.n_components = dict_gaussian['n_components']
         return 
     
-    def _fit_distribution(self, gmm_distances : np.ndarray, species : str) -> None :
+    def _fit_gmm_distribution(self, gmm_distances : np.ndarray, species : str) -> None :
         """Build KDE estimation for a given species
         
         Parameters
@@ -88,7 +88,7 @@ class GMMModel :
             self.models[species]['distribution'][-1].fit( gmm_distances[:,k][mask].reshape(-1,1) )
         return 
     
-    def _predict_probability(self, gmm_distances : np.ndarray, species : str) -> np.ndarray : 
+    def _predict_gmm_probability(self, gmm_distances : np.ndarray, species : str) -> np.ndarray : 
         """Compute probability of a given mcd_distances vector based on MCD distances kde estimation
         
         Parameters
@@ -149,7 +149,7 @@ class GMMModel :
 
         def local_setting_gmm(atoms : Atoms) -> None : 
             gmm_distance = mahalanobis_gmm(self.models[species]['gmm'],atoms.get_array('milady-descriptors')) 
-            atoms.set_array('gmm-distance',gmm_distance, dtype=float)
+            atoms.set_array(f'gmm-distance-{self.name}',gmm_distance, dtype=float)
 
         [local_setting_gmm(atoms) for atoms in list_atoms]
 
