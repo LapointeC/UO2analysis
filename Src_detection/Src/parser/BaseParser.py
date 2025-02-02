@@ -195,3 +195,179 @@ class BaseParser:
         for key,value in _args.items():
             script = self.replace(script,key,value)
         return script
+    
+    
+    
+class UNSEENConfigParser: 
+    def __init__(self, xml_path: str):
+        self.xml_path = xml_path
+        self.auto_config: Dict[str, Any] = {}
+        self.custom_config: List[Dict[str, Any]] = []
+        
+        if os.path.exists(xml_path):
+            self.tree = ET.parse(xml_path)
+            self.root = self.tree.getroot()
+            self.parse()
+        else:
+            print(f"XML file {xml_path} not found. Using default parameters.")
+            self.set_defaults()
+            
+    def set_defaults(self) -> None:
+        """Initialize configuration with default values"""
+        # Auto configuration defaults
+        self.auto_config = {
+            'name': 'main_analysis',
+            'directory': './',
+            'md_format': 'cfg',
+            'id_atoms': 'all',
+            'models': {'MCD': True, 'GMM': False, 'MAHA': False},
+            'MCD': {'nb_bin_histo': 100, 'nb_selected': 10000, 'contamination': 0.05},
+            'GMM': {
+                'nb_bin_histo': 100,
+                'nb_selected': 10000,
+                'dic_gaussian': {
+                    'n_components': 2,
+                    'covariance_type': 'full',
+                    'init_params': 'kmeans'
+                }
+            },
+            'MAHA': {'nb_bin_histo': 100, 'nb_selected': 10000}
+        }
+        self.custom_config = []        
+
+    def parse(self) -> None:
+        """Main parsing method to process Auto and Custom tags"""
+        for child in self.root:
+            if child.tag == 'Auto':
+                self.parse_auto(child)
+            elif child.tag == 'Custom':
+                self.parse_custom(child)
+
+    def parse_auto(self, element: ET.Element) -> None:
+        """Parse <Auto> configuration"""
+        self.auto_config['name'] = element.findtext('name', default='main_analysis').strip()
+        self.auto_config['directory'] = element.findtext('directory', default='./').strip()
+        self.auto_config['md_format'] = element.findtext('md_format', default='cfg').strip()
+        self.auto_config['id_atoms'] = self.parse_id_atoms(element.findtext('id_atoms', default='all'))
+        
+        # Parse model activation
+        model_text = element.findtext('model', default='MCD').strip()
+        self.auto_config['models'] = {
+            'MCD': 'MCD' in model_text.split(),
+            'GMM': 'GMM' in model_text.split(),
+            'MAHA': 'MAHA' in model_text.split()
+        }
+        
+        # Parse model options
+        self.auto_config['MCD'] = self.parse_mcd(element.find('MCD'))
+        self.auto_config['GMM'] = self.parse_gmm(element.find('GMM'))
+        self.auto_config['MAHA'] = self.parse_maha(element.find('MAHA'))
+
+    def parse_custom(self, element: ET.Element) -> None:
+        """Parse <Custom> configuration containing multiple <Reference> entries"""
+        for ref_elem in element.findall('Reference'):
+            ref: Dict[str, Any] = {}
+            ref['name'] = ref_elem.findtext('name', default='ref_01').strip()
+            ref['directory'] = ref_elem.findtext('directory', default='./References').strip()
+            ref['md_format'] = ref_elem.findtext('md_format', default='cfg').strip()
+            ref['id_atoms'] = self.parse_id_atoms(ref_elem.findtext('id_atoms', default='all'))
+            
+            model_text = ref_elem.findtext('model', default='MCD').strip()
+            ref['models'] = {
+                'MCD': 'MCD' in model_text.split(),
+                'GMM': 'GMM' in model_text.split(),
+                'MAHA': 'MAHA' in model_text.split()
+            }
+            
+            ref['MCD'] = self.parse_mcd(ref_elem.find('MCD'))
+            ref['GMM'] = self.parse_gmm(ref_elem.find('GMM'))
+            ref['MAHA'] = self.parse_maha(ref_elem.find('MAHA'))
+            
+            self.custom_config.append(ref)
+
+    def parse_id_atoms(self, id_text: str) -> List[int] | str:
+        """Parse id_atoms string into list of integers or 'all'"""
+        id_text = id_text.strip()
+        if id_text.lower() == 'all':
+            return 'all'
+        
+        ids = []
+        ranges = id_text.split(',')
+        for r in ranges:
+            if '-' in r:
+                start, end = map(int, r.split('-'))
+                ids.extend(range(start, end + 1))
+            else:
+                ids.append(int(r))
+        return ids
+
+    def parse_mcd(self, mcd_elem: ET.Element | None) -> Dict[str, Any]:
+        """Parse MCD options with defaults"""
+        defaults = {'nb_bin_histo': 100, 'nb_selected': 10000, 'contamination': 0.05}
+        if mcd_elem is None:
+            return defaults
+        
+        opts = mcd_elem.find('mcd_options')
+        if opts is None:
+            return defaults
+        
+        mcd = defaults.copy()
+        for child in opts:
+            tag = child.tag
+            if tag == 'nb_bin_histo':
+                mcd[tag] = int(child.text)
+            elif tag == 'nb_selected':
+                mcd[tag] = int(child.text)
+            elif tag == 'contamination':
+                mcd[tag] = float(child.text)
+        return mcd
+
+    def parse_gmm(self, gmm_elem: ET.Element | None) -> Dict[str, Any]:
+        """Parse GMM options with defaults"""
+        defaults = {
+            'nb_bin_histo': 100,
+            'nb_selected': 10000,
+            'dic_gaussian': {
+                'n_components': 2,
+                'covariance_type': 'full',
+                'init_params': 'kmeans'
+            }
+        }
+        if gmm_elem is None:
+            return defaults
+        
+        opts = gmm_elem.find('gmm_options')
+        if opts is None:
+            return defaults
+        
+        gmm = defaults.copy()
+        for child in opts:
+            tag = child.tag
+            if tag in ['nb_bin_histo', 'nb_selected']:
+                gmm[tag] = int(child.text)
+            elif tag == 'dic_gaussian':
+                for g_child in child:
+                    g_tag = g_child.tag
+                    if g_tag == 'n_components':
+                        gmm['dic_gaussian'][g_tag] = int(g_child.text)
+                    else:
+                        gmm['dic_gaussian'][g_tag] = g_child.text.strip()
+        return gmm
+
+    def parse_maha(self, maha_elem: ET.Element | None) -> Dict[str, Any]:
+        """Parse MAHA options with defaults"""
+        defaults = {'nb_bin_histo': 100, 'nb_selected': 10000}
+        if maha_elem is None:
+            return defaults
+        
+        opts = maha_elem.find('maha_options')
+        if opts is None:
+            return defaults
+        
+        maha = defaults.copy()
+        for child in opts:
+            tag = child.tag
+            if tag in ['nb_bin_histo', 'nb_selected']:
+                maha[tag] = int(child.text)
+        return maha
+

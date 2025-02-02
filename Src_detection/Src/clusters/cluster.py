@@ -129,6 +129,142 @@ class Cluster :
         return len(self.atoms_dfct) - self.get_volume()/mean_atomic_volume
 
 
+class NanoCluster : 
+    """Cluster class which contains all data about atomic defects found in a given configuration.
+    This class contains the present list of methods
+    
+    - append : update defect cluster with new atom object 
+    - update_extension : update the spatial extension of the cluster
+    - get_volume : return the volume of the cluster
+    - estimation_dfct_number : return an estimation of the number of defect inside the cluster (working for point defects...)
+
+    """
+    def __init__(self, atom : Atom, rcut : float, array_property : Dict[str,Any] = {}) -> None : 
+        """Init method cluster class 
+        
+        Parameters
+        ----------
+
+        atom : Atom 
+            First atom object indentifies to be part of the cluster 
+
+        rcut : float 
+            Initial size of the cluster 
+        
+        array_property : Dict[str,Any]
+            Dictionnnary which contains additional data about atom in the cluster (atomic volume, mcd distance ...)
+
+        """
+        self.array_property = array_property
+        self.atoms_dfct = Atoms()
+        self.atoms_dfct.append(atom)
+        self.rcut = rcut
+        self.size = rcut
+        self.elliptic = (1.0/(self.size**2))*np.eye(3)
+        self.backup_elliptic = (1.0/(self.size**2))*np.eye(3)
+        self.center = self.atoms_dfct.positions
+        print('NanoCluster created this is fake script will stop here')
+        exit(0) 
+
+    def append(self, atom : Atom, array_property : Dict[str,Any] = {}, elliptic : str ='iso') -> None : 
+        """Append new atom in the cluster
+        
+        Parameters
+        ----------
+
+        atom : Atom 
+            New atom to put in the cluster 
+        
+        array_property : Dict[str,Any]
+            Dictionnnary which contains additional data about atom in the cluster (atomic volume, mcd distance ...)
+
+        """       
+        self.atoms_dfct.append(atom)
+        self.center = self.atoms_dfct.get_center_of_mass()
+        if elliptic == 'iso' :
+            self.size = self.update_extension()
+            self._isotropic_extension()
+        if elliptic == 'aniso' : 
+            self._anistropic_extension()
+        
+        for prop in array_property.keys() : 
+            self.array_property[prop] += array_property[prop]
+
+    def update_extension(self) -> float : 
+        """Update the spatial extension of the cluster 
+        Should be changed for non isotropic defects ..."""
+        return max([self.rcut, np.amax( [np.linalg.norm(pos - self.center) for pos in self.atoms_dfct.positions ] )])
+
+    def _isotropic_extension(self) -> None : 
+        """Distance covariance estimatior for isotropic clusters"""
+        self.elliptic = (1.0/(self.size**2))*np.eye(3)
+    
+    def _anistropic_extension(self, regularisation : float = 0.0) -> None : 
+        """Distance covariance estimatior for anisotropic clusters
+        
+        Parameters
+        ----------
+
+        regularisation : float 
+            regularisation parameter for covariance matrix pseudo inversion
+        """
+        covariance = (self.atoms_dfct.positions - self.center).T@(self.atoms_dfct.positions - self.center)/(self.atoms_dfct.positions.shape[0] - 1)
+        self.elliptic = np.linalg.pinv(covariance + regularisation*np.eye(covariance.shape[0]))
+
+        # check the minimal isotropic raduis for each direction
+        for i in range(self.elliptic.shape[0]) : 
+            if self.elliptic[i,i] > 1.0/(self.rcut**2) :
+                self.elliptic[i,:] = 0.0
+                self.elliptic[:,i] = 0.0
+                self.elliptic[i,i] = 1.0/(self.rcut**2)
+
+    def get_elliptic_distance(self, atom : Atom) -> float :
+        """Compute distance to the elliptic covariance distances envelop
+        
+        Parameters
+        ----------
+
+        atom : Atom
+            Atom object to compute the elliptic distance
+
+        Returns:
+        --------
+
+        float : Elliptic distance
+        """
+        return np.sqrt((atom.position.flatten()-self.center.flatten())@self.elliptic@(atom.position.flatten()- self.center.flatten()).T)
+
+    def get_volume(self) -> float : 
+        """Get an estimation of the cluster volume 
+        
+        Returns:
+        --------
+
+        float : cluster volume 
+        """
+        return np.sum(self.array_property['atomic-volume'])
+    
+    def estimate_dfct_number(self, mean_atomic_volume : float) -> float :
+        """Get an estimation of number interstitial atom inside the cluster
+        
+        Returns:
+        --------
+
+        float : number of atom estimation
+        """
+        return len(self.atoms_dfct) - self.get_volume()/mean_atomic_volume
+
+
+
+
+
+
+
+
+
+
+
+
 class LocalLine : 
     """LocalLine object which contains all local properties of the dislocation like 
     ````local_normal``` and ```local_burger``` ..."""
