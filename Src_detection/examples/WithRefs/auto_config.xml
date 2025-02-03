@@ -1,0 +1,21 @@
+<Configuration>
+    <Auto>
+        <name>FeBulk</name>
+        <directory>Auto/bulk_BCC</directory>
+        <md_format>cfg</md_format>
+        <id_atoms>1-20,30-50</id_atoms>
+        <model>MCD GMM</model>
+        <MCD>
+            <mcd_options>
+                <nb_bin_histo>150</nb_bin_histo>
+                <contamination>0.1</contamination>
+            </mcd_options>
+        </MCD>
+        <GMM>
+            <gmm_options>
+                <n_components>3</n_components>
+                <covariance_type>diag</covariance_type>
+            </gmm_options>
+        </GMM>
+    </Auto>
+</Configuration>

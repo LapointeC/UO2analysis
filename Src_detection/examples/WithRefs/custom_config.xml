@@ -1,0 +1,40 @@
+<Configuration>
+    <Custom>
+        <Reference>
+            <name>bulk_C15</name>
+            <directory>References/bulk_C15/</directory>
+            <id_atoms>all</id_atoms>
+            <model>MCD MAHA</model>
+            <MCD>
+                <mcd_options>
+                    <nb_selected>5000</nb_selected>
+                </mcd_options>
+            </MCD>
+        </Reference>
+        <Reference>
+            <name>sia_110</name>
+            <directory>References/sia_110/</directory>
+            <model>GMM</model>
+            <GMM>
+                <gmm_options>
+                    <nb_selected>20000</nb_selected>
+                    <dic_gaussian>
+                        <n_components>4</n_components>
+                        <init_params>random</init_params>
+                    </dic_gaussian>
+                </gmm_options>
+            </GMM>
+        </Reference>
+        <Reference>
+            <name>sia_110</name>
+            <directory>References/sia_110/</directory>
+            <model>MAHA</model>
+             <id_atoms>1,2</id_atoms>
+            <MAHA>
+                <maha_options>
+                    <nb_bin_histo>200</nb_bin_histo>
+                </maha_options>
+            </MAHA>
+        </Reference>
+    </Custom>
+</Configuration>

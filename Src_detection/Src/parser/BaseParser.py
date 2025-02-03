@@ -1,8 +1,9 @@
 from __future__ import annotations
 import numpy as np
-import os, shutil
+import os, sys, shutil
 import xml.etree.ElementTree as ET
 import numpy as np
+import pathlib 
 from typing import Union,Any,List
 ScriptArg = Union[int,float,str]
 
@@ -247,7 +248,24 @@ class UNSEENConfigParser:
         """Parse <Auto> configuration"""
         self.auto_config['name'] = element.findtext('name', default='main_analysis').strip()
         self.auto_config['directory'] = element.findtext('directory', default='./').strip()
+        
+        # Convert to a pathlib object
+        directory_path = pathlib.Path(self.auto_config['directory'])
+        
+        # Check if the directory exists and is not a symbolic link
+        if not directory_path.exists():
+             print(f"Error: The specified Auto directory '{directory_path}' does not exist. Please check the configuration.")
+             sys.exit(1) 
+        #elif directory_path.is_symlink() or directory_path.is_dir():
+        #    raise ValueError(f"Error: The directory '{directory_path}' is a symbolic link, which is not allowed.")
+        if not directory_path.is_dir():
+             print(f"Error: The path '{directory_path}' exists but is not a directory.")
+             sys.exit(1) 
+
+        
         self.auto_config['md_format'] = element.findtext('md_format', default='cfg').strip()
+        print(self.auto_config['md_format'])
+        exit(0) 
         self.auto_config['id_atoms'] = self.parse_id_atoms(element.findtext('id_atoms', default='all'))
         
         # Parse model activation
@@ -269,6 +287,18 @@ class UNSEENConfigParser:
             ref: Dict[str, Any] = {}
             ref['name'] = ref_elem.findtext('name', default='ref_01').strip()
             ref['directory'] = ref_elem.findtext('directory', default='./References').strip()
+            # Convert to a pathlib object
+            directory_path = pathlib.Path(ref['directory'])
+            
+            # Check if the directory exists and is not a symbolic link
+            if not directory_path.exists():
+                 print(f"Error: The specified Custom directory '{directory_path}' does not exist. Please check the configuration.")
+                 sys.exit(1) 
+            #elif directory_path.is_symlink() or directory_path.is_dir():
+            #    raise ValueError(f"Error: The directory '{directory_path}' is a symbolic link, which is not allowed.")
+            if not directory_path.is_dir():
+             print(f"Error: The path '{directory_path}' exists but is not a directory.")
+             sys.exit(1) 
             ref['md_format'] = ref_elem.findtext('md_format', default='cfg').strip()
             ref['id_atoms'] = self.parse_id_atoms(ref_elem.findtext('id_atoms', default='all'))
             
