@@ -263,17 +263,31 @@ class UNSEENConfigParser:
              sys.exit(1) 
 
         
-        self.auto_config['md_format'] = element.findtext('md_format', default='cfg').strip()
-        print(self.auto_config['md_format'])
-        exit(0) 
+        self.auto_config['md_format'] = element.findtext('md_format', default='cfg').strip()            
+        allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
+        md_format = element.findtext('md_format', default='cfg').strip()
+        if md_format not in allowed_formats:
+            print(f"Invalid md_format for Auto: '{md_format}'. ")
+            print(f"Allowed formats are: {', '.join(sorted(allowed_formats))}")
+            sys.exit(1) 
+            
+
         self.auto_config['id_atoms'] = self.parse_id_atoms(element.findtext('id_atoms', default='all'))
         
-        # Parse model activation
+        
         model_text = element.findtext('model', default='MCD').strip()
+        models = model_text.split()
+        allowed_models = {'MCD', 'GMM', 'MAHA'}
+        invalid_models = [model for model in models if model not in allowed_models]
+        
+        if invalid_models:
+            print(f"Invalid model(s): {invalid_models}. Allowed options in Auto are MCD, GMM, MAHA")
+            sys.exit(1)
+        
         self.auto_config['models'] = {
-            'MCD': 'MCD' in model_text.split(),
-            'GMM': 'GMM' in model_text.split(),
-            'MAHA': 'MAHA' in model_text.split()
+            'MCD': 'MCD' in models,
+            'GMM': 'GMM' in models,
+            'MAHA': 'MAHA' in models
         }
         
         # Parse model options
@@ -300,9 +314,27 @@ class UNSEENConfigParser:
              print(f"Error: The path '{directory_path}' exists but is not a directory.")
              sys.exit(1) 
             ref['md_format'] = ref_elem.findtext('md_format', default='cfg').strip()
+            
+            allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
+            md_format = ref_elem.findtext('md_format', default='cfg').strip()
+            if md_format not in allowed_formats:
+                print(f"Invalid md_format for Reference: '{md_format}'. ")
+                print(f"Allowed formats are: {', '.join(sorted(allowed_formats))}")
+                sys.exit(1) 
+            
+            
             ref['id_atoms'] = self.parse_id_atoms(ref_elem.findtext('id_atoms', default='all'))
             
             model_text = ref_elem.findtext('model', default='MCD').strip()
+            models = model_text.split()
+            allowed_models = {'MCD', 'GMM', 'MAHA'}
+            invalid_models = [model for model in models if model not in allowed_models]
+        
+            if invalid_models:
+                print(f"Invalid model(s): {invalid_models}. Allowed options in Reference are MCD, GMM, MAHA")
+                sys.exit(1)
+        
+            
             ref['models'] = {
                 'MCD': 'MCD' in model_text.split(),
                 'GMM': 'GMM' in model_text.split(),

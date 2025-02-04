@@ -15,6 +15,8 @@ import sys
 import re
 import numpy as np
 import subprocess
+import pickle
+import glob
 from contextlib import contextmanager
 from pathlib import Path
 from warnings import warn
@@ -33,6 +35,7 @@ from ase.calculators.calculator import Calculator
 from .create_inputs import GenerateMiladyInput
 
 from .milady_writer import fill_milady_descriptor, write_milady_poscar
+from ..mld import DBDictionnaryBuilder
 
 DEFAULTS = {"r_cut": 5.0}
 
@@ -1542,5 +1545,167 @@ class Milady(Calculator):  # type: ignore
                                                                        ext=dic_equiv_properties[property])
                         else :
                             raise calculator.CalculatorSetupError("This property is not yet implemented")
+                   
+class ComputeDescriptor:
+    """
+    A class to compute descriptors using Milady. The class encapsulates the 
+    procedure originally executed when the flag 'milady_compute' was set to True.
+    
+    Parameters
+    ----------
+    path_bulk : str, optional
+        Directory where the MD configuration files are located. The search is done recursively.
+        Default is "./".
+    pickle_data_file : str, optional
+        Filename for the output pickle file (storing the processed database).
+        Default is "data.pickle".
+    md_format : str, optional
+        The file extension used to select MD configuration files (e.g., 'cfg').
+        Default is "cfg".
+    """
+    
+    def __init__(self, path_bulk: str = "./", pickle_data_file: str = "data.pickle", md_format: str = "cfg"):
+        self.path_bulk = path_bulk
+        self.pickle_data_file = pickle_data_file
+        self.md_format = md_format
+        
+        # Set defaults for the chemical system.
+        self.chemical_elements = ['Fe']  # Hard-coded for Ti as in the original script.
+        self.ncpu = 2
+        self.directory = 'mld'
+        
+        # Commands for calling Milady and MPI.
+        self.milady_command = '/home/marinica/MLD_GitHub/mld_build_mix/bin/milady_main.exe'
+        self.mpi_command = 'mpirun -np'
+    
+    @staticmethod
+    def change_species(atoms: Atoms, species: List[str]) -> Atoms:
+        """
+        Update the Atoms object so that each atom gets the symbol provided in the species list.
+        
+        Parameters
+        ----------
+        atoms : Atoms
+            An ASE Atoms object.
+        species : list of str
+            A list of symbols, one for each atom.
+        
+        Returns
+        -------
+        Atoms
+            The updated Atoms object.
+        """
+        for i, atom in enumerate(atoms):
+            atom.symbol = species[i]
+        return atoms
+
+    def compute(self):
+        """
+        Run the descriptor computation. This method:
+        
+          1. Searches for all files in 'path_bulk' with the given extension.
+          2. Reads each file using ASE, fixes the atom types (using 'change_species'),
+             and updates a DBDictionnaryBuilder (using a default subclass label).
+          3. Sets up the DBManager, Optimiser (Milady), Regressor (ComputeDescriptors)
+             and Descriptor (BSO4) objects.
+          4. Sets the environment variables needed for Milady.
+          5. Runs Milady to compute the descriptors.
+          6. Saves the database model as a pickle file.
+        """
+        # --- Step 1: Build the DB dictionary from all configuration files ---
+        print("Initializing DB Dictionary Builder ...")
+        db_dic_builder = DBDictionnaryBuilder()
+        
+        # Build the file pattern using the given directory and file extension.
+        pattern = os.path.join(self.path_bulk, '**', f'*.{self.md_format}')
+        md_list = glob.glob(pattern, recursive=True)
+        #debug_cos print(md_list)
+        print(f"... Loading {len(md_list):4d} configuration files for descriptors calculation ...")
+        
+        #for md_file in md_list:
+        #    try:
+        #        # Here we use the same read format as in the original script.
+        #        md_atoms = read(md_file, format='lammps-dump-text')
+        #    except Exception as e:
+        #        print(f"Error reading file {md_file}: {e}")
+        #        continue
+        #    # Update the atoms with the correct species.
+        #    md_atoms = self.change_species(md_atoms, [self.chemical_elements[0]] * len(md_atoms))
+        #    # Since we are not using a dictionary of subclasses, use a default label.
+        #    db_dic_builder._update(md_atoms, "default")
+            
+            
+        # Define the allowed file extensions and a mapping to ASE read formats.
+        allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
+        format_mapping = {
+            'cfg':    'lammps-dump-text',  # same as before
+            'dump':   'lammps-dump-text',
+            'poscar': 'vasp',
+            'data':   'lammps-data',
+            'xyz':    'xyz',
+            ## For 'mixed' and 'unseen', you can choose the appropriate formats or default to something.
+            #'mixed':  'lammps-dump-text',  
+            #'unseen': 'lammps-dump-text'
+        }
+
+        for md_file in md_list:
+            # Get the file extension (without the dot) in lowercase.
+            ext = os.path.splitext(md_file)[1].lstrip('.').lower()
+            if ext not in allowed_formats:
+                print(f"File {md_file} has extension '{ext}' which is not in the allowed list, skipping...")
+                continue
+        
+            # Get the appropriate format string for ASE.read, defaulting to 'lammps-dump-text' if not mapped.
+            read_format = format_mapping.get(ext, 'lammps-dump-text')
+            #debug_cos print(md_file)
+            try:
+                md_atoms = read(md_file, format=read_format)
+            except Exception as e:
+                print(f"Error reading file {md_file} with format '{read_format}': {e}")
+                continue
+        
+            # Update the atoms with the correct species.
+            md_atoms = self.change_species(md_atoms, [self.chemical_elements[0]] * len(md_atoms))
+            
+            # Add the configuration to the DB dictionary with a default label.
+            db_dic_builder._update(md_atoms, "01_111")
+     
+        
+        print("... All configurations have been embedded in Atoms objects ...")
+        
+        # --- Step 2: Build the database model ---
+        model_ini_dict = db_dic_builder._generate_dictionnary()
+        dbmodel = DBManager(model_ini_dict=model_ini_dict)
+        
+        # --- Step 3: Setup Milady objects ---
+        optimiser = Optimiser.Milady(fix_no_of_elements=1,
+                                     chemical_elements=self.chemical_elements,
+                                     desc_forces=False)
+        regressor = Regressor.ComputeDescriptors(write_design_matrix=False)
+        descriptor = Descriptor.BSO4(r_cut=5.0, j_max=4.0, lbso4_diag=False)
+        
+        # --- Step 4: Set environment variables for Milady ---
+        os.environ['MILADY_COMMAND'] = self.milady_command
+        os.environ['MPI_COMMAND'] = self.mpi_command
+        
+        # --- Step 5: Run Milady ---
+        print("... Starting Milady ...")
+        mld_calc = Milady(optimiser,
+                          regressor,
+                          descriptor,
+                          dbmodel=dbmodel,
+                          directory=self.directory,
+                          ncpu=self.ncpu)
+        
+        mld_calc.calculate(properties=['milady-descriptors'])
+        print("... Milady calculation is done ...")
+        
+        # --- Step 6: Save the resulting database model ---
+        if os.path.exists(self.pickle_data_file):
+            os.remove(self.pickle_data_file)
+        print("... Writing pickle object ...")
+        with open(self.pickle_data_file, 'wb') as f:
+            pickle.dump(mld_calc.dbmodel, f)
+        print("... Pickle object is written :) ...")
                     
                 

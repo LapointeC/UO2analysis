@@ -7,60 +7,27 @@ os.system('pwd')
 #from Src import ReferenceBuilder
 from Src.parser.BaseParser import UNSEENConfigParser
 from Src.analysis.reference import ReferenceBuilder
+from Src.mld.milady import ComputeDescriptor
 
 
-#if __name__ == "__main__":
-#    VERSION='0.90'
-#    print(f"UNSEEN TOKEN VERSION: {VERSION}\n")
-#    
-#    def print_fancy_header(message: str) -> None:
-#        """Prints a fancy header for better readability"""
-#        print("=" * 50)
-#        print(f"{message:^50}")
-#        print("=" * 50)
-#
-#    def print_config(title: str, config: Dict[str, Any]) -> None:
-#        """Prints a configuration dictionary in a structured way"""
-#        print(f"\n{title}:")
-#        for key, value in config.items():
-#            if isinstance(value, dict):
-#                print(f"  {key}:")
-#                for subkey, subvalue in value.items():
-#                    print(f"    {subkey}: {subvalue}")
-#            else:
-#                print(f"  {key}: {value}")
-#
-#    # Check and process auto_config.xml
-#    auto_file = "auto_config.xml"
-#    if os.path.exists(auto_file):
-#        print_fancy_header(f"Reading Auto Config from {auto_file}")
-#        auto_parser = UNSEENConfigParser(auto_file)
-#        print_config("Auto Configuration", auto_parser.auto_config)
-#    else:
-#        print_fancy_header(f"{auto_file} not found. Loading Default Auto Config")
-#        auto_parser = UNSEENConfigParser(auto_file)
-#        print_config("Default Auto Configuration", auto_parser.auto_config)
-#
-#    # Check and process custom_config.xml
-#    custom_file = "custom_config.xml"
-#    if os.path.exists(custom_file):
-#        print_fancy_header(f"Reading Custom Config from {custom_file}")
-#        custom_parser = UNSEENConfigParser(custom_file)
-#        if custom_parser.custom_config:
-#            print("\nCustom Config References:")
-#            for i, ref in enumerate(custom_parser.custom_config, 1):
-#                print(f"\nReference {i}:")
-#                print_config("Reference Configuration", ref)
-#        else:
-#            print("\nNo custom references found in the file.")
-#    else:
-#        print_fancy_header(f"{custom_file} not found. No Custom References Loaded")
-#        custom_parser = UNSEENConfigParser(custom_file)
-#        print("No custom references were loaded as the file does not exist.")
-
-
-#path=""
-#a = ReferenceBuilder(path)
+def split_path(path: str) -> tuple[str, str]:
+    # If the path normalizes to '.', return './' for both directory and base name.
+    if os.path.normpath(path) == '.':
+        return './', './'
+    
+    # For non-root paths that end with a separator, remove the trailing separator.
+    # (Note: We keep the separator for root '/', which should remain as is.)
+    if len(path) > 1 and path.endswith(os.sep):
+        path = path.rstrip(os.sep)
+    
+    # Split the path into directory and base name.
+    dir_name, base_name = os.path.split(path)
+    
+    # If the directory part is not empty, ensure it ends with a separator.
+    if dir_name and not dir_name.endswith(os.sep):
+        dir_name += os.sep
+        
+    return dir_name, base_name
 
 def print_fancy_header(message: str) -> None:
     """Prints a fancy header for better readability"""
@@ -114,7 +81,59 @@ if __name__ == "__main__":
         print_fancy_header(f"{custom_file} not found. No Custom References")
         
         
-   # compute descriptors if needed ...      
+   # compute descriptors if needed ...    
+   
+   
+   # -----------------------------
+    # Run descriptor computation for each configuration.
+    # -----------------------------
+
+    # For the Auto configuration:
+    #put current directory into some variable: 
+    cdir = os.getcwd()
+    
+    if auto_config:
+        # Get the MD files directory, MD file format, and a name for the pickle file
+        auto_directory = auto_config.get('directory', './')
+        dir_where, dir_name = split_path(auto_directory)
+        auto_md_format = auto_config.get('md_format', 'cfg')
+        # Use the 'name' field to build the pickle filename. For example, if name is "bulk_BCC":
+        auto_pickle_file = f"{auto_config.get('name', 'auto')}.pickle"
+        
+        print_fancy_header(f"Running descriptor computation for Auto configuration")
+        print(f"Directory: {auto_directory}")
+        print(f"MD file format: {auto_md_format}")
+        print(f"Output pickle file: {auto_pickle_file}\n")
+        
+        # Create an instance of ComputeDescriptor with the XML options
+        os.chdir(dir_where)
+        cd_auto = ComputeDescriptor(path_bulk=dir_name,
+                                    pickle_data_file=auto_pickle_file,
+                                    md_format=auto_md_format)
+        cd_auto.compute()
+        os.chdir(cdir)
+    ## For each Custom reference configuration:
+    print(custom_config)
+    os.system('pwd')
+    
+    if custom_config:
+        for ref in custom_config:
+            # For each custom reference, extract the directory, md_format, and name.
+            ref_directory = ref.get('directory', './')
+            dir_where, dir_name = split_path(ref_directory)
+            ref_md_format = ref.get('md_format', 'cfg')
+            ref_pickle_file = f"{ref.get('name', 'ref')}.pickle"
+            
+            print_fancy_header(f"Running descriptor computation for Custom Reference: {ref.get('name', 'ref')}")
+            print(f"Directory: {ref_directory}")
+            print(f"MD file format: {ref_md_format}")
+            print(f"Output pickle file: {ref_pickle_file}\n")
+            os.chdir(dir_where)         
+            cd_custom = ComputeDescriptor(path_bulk=dir_name,
+                                          pickle_data_file=ref_pickle_file,
+                                          md_format=ref_md_format)
+            cd_custom.compute()  
+            os.chdir(cdir)
 
    # Build models
     try:

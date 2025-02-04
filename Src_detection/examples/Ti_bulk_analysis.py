@@ -29,7 +29,7 @@ def change_species(atoms : Atoms, species : List[str]) -> Atoms :
 ########################################################
 path_bulk = '/home/lapointe/WorkML/TiAnalysis/bulk_data'
 dic_sub_class = {'600K':'00_000','900K':'01_000'}
-milady_compute = False
+milady_compute = True
 pickle_data_file = 'dataTi_bulk.pickle'
 pickle_model_file = 'MCD.pickle'
 #########################################################
