@@ -170,20 +170,54 @@ class ReferenceBuilder:
         # Get model parameters from config
         model_params = config.get(model_kind, {})
         
+        #debug_cos print(config)
+        #debug_cos print(directory)
+        #debug_cos print(species)
+        #debug_cos print(model_kind)
+        #debug_cos print(name_model)
+        #debug_cos os.system('pwd')
+        #debug_cos exit(0) 
+        
         # Read configuration files
         list_config_file = [
             os.path.join(directory, f) 
             for f in os.listdir(directory) 
             if f.endswith(config.get('md_format', 'cfg'))
         ]
+        #debug_cos print('HHHH', list_config_file)
+        
+        
 
         # Read and process atoms
         list_atoms = []
+        #TODO_cos unify with other places 
+        # Define the allowed file extensions and a mapping to ASE read formats. 
+        allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
+        format_mapping = {
+            'cfg':    'cfg',  # same as before
+            'dump':   'lammps-dump-text',
+            'poscar': 'vasp',
+            'data':   'lammps-data',
+            'xyz':    'xyz',
+            ## For 'mixed' and 'unseen', you can choose the appropriate formats or default to something.
+            #'mixed':  'lammps-dump-text',  
+            #'unseen': 'lammps-dump-text'
+        }  
         for file in list_config_file:
             try:
-                atoms = read(file, format=self._get_extension(file))
+                # this read_function should be improved ....  
+                if self._get_extension(file) != config.get('md_format', 'cfg') : 
+                    print(f"Malheur: extension of {file } not match the input c{config.get('md_format', 'cfg')} ")
+                    exit(1)
+                # Get the appropriate format string for ASE.read, defaulting to 'lammps-dump-text' if not mapped.
+                read_format = format_mapping.get(config.get('md_format', 'cfg'), 'lammps-dump-text')    
+                #atoms = read(file, format=self._get_extension(file))
+                atoms = read(file, format=read_format)
+                #TODO_cos selection_mask and id_atoms  
                 if 'selection_mask' in config:  # If using selection mask from config
-                    atoms = atoms[config['selection_mask']]
+                   atoms = atoms[config['selection_mask']]
+                if config['id_atoms'] != 'all' : 
+                   atoms = atoms[config['id_atoms']] 
                 list_atoms.append(atoms)
             except Exception as e:
                 print(f"Error reading {file}: {str(e)}")
@@ -225,3 +259,7 @@ class ReferenceBuilder:
 
     def _get_extension(self, file: str) -> str:
         return os.path.basename(file).split('.')[-1]
+    
+    
+    
+    

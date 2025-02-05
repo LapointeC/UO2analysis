@@ -84,9 +84,10 @@ if __name__ == "__main__":
    # compute descriptors if needed ...    
    
    
-   # -----------------------------
+    # ---------------------------------------------------------
     # Run descriptor computation for each configuration.
-    # -----------------------------
+    # Descriptor time ... 
+    # ---------------------------------------------------------
 
     # For the Auto configuration:
     #put current directory into some variable: 
@@ -135,15 +136,19 @@ if __name__ == "__main__":
             cd_custom.compute()  
             os.chdir(cdir)
 
-   # Build models
+    # ---------------------------------------------------------
+    # Build models get the references ... 
+    #----------------------------------------------------------
+    os.system('pwd')
+    
     try:
         builder = ReferenceBuilder(auto_config=auto_config, custom_config=custom_config)
         
         if auto_config:
             builder.process_auto_config()
         
-        if custom_config:
-            builder.process_custom_references()
+        # if custom_config:
+        #     builder.process_custom_references()
             
         print("\n" + "="*50)
         print("Model Building Complete".center(50))

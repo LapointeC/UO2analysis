@@ -1634,11 +1634,11 @@ class ComputeDescriptor:
         #    # Since we are not using a dictionary of subclasses, use a default label.
         #    db_dic_builder._update(md_atoms, "default")
             
-            
+        #TODO_cos unify with other places      
         # Define the allowed file extensions and a mapping to ASE read formats.
         allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
         format_mapping = {
-            'cfg':    'lammps-dump-text',  # same as before
+            'cfg':    'cfg',  # same as before
             'dump':   'lammps-dump-text',
             'poscar': 'vasp',
             'data':   'lammps-data',
