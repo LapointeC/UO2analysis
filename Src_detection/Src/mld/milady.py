@@ -1564,7 +1564,7 @@ class ComputeDescriptor:
         Default is "cfg".
     """
     
-    def __init__(self, path_bulk: str = "./", pickle_data_file: str = "data.pickle", md_format: str = "cfg"):
+    def __init__(self, path_bulk: str = "./", pickle_data_file: str = "data.pickle", md_format: str = "cfg") : #, mask_atoms: Union[List[int], str] = "all"):
         self.path_bulk = path_bulk
         self.pickle_data_file = pickle_data_file
         self.md_format = md_format
@@ -1636,7 +1636,7 @@ class ComputeDescriptor:
             
         #TODO_cos unify with other places      
         # Define the allowed file extensions and a mapping to ASE read formats.
-        allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
+        allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump'}
         format_mapping = {
             'cfg':    'cfg',  # same as before
             'dump':   'lammps-dump-text',

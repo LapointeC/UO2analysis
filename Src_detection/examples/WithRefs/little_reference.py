@@ -64,7 +64,7 @@ if __name__ == "__main__":
         print_fancy_header(f"Reading Auto Config from {auto_file}")
         auto_parser = UNSEENConfigParser(auto_file)
         auto_config = auto_parser.auto_config
-        print_config("Auto Configuration", auto_config)
+        #print_config("Auto Configuration", auto_config)
     else:
         print_fancy_header(f"{auto_file} not found. Using Default Auto Config")
         auto_parser = UNSEENConfigParser(auto_file)  # Will create defaults
@@ -76,7 +76,7 @@ if __name__ == "__main__":
         print_fancy_header(f"Reading Custom Config from {custom_file}")
         custom_parser = UNSEENConfigParser(custom_file)
         custom_config = custom_parser.custom_config
-        print_config("Custom Configuration", {"References": custom_config})
+        #print_config("Custom Configuration", {"References": custom_config})
     else:
         print_fancy_header(f"{custom_file} not found. No Custom References")
         
@@ -99,7 +99,8 @@ if __name__ == "__main__":
         dir_where, dir_name = split_path(auto_directory)
         auto_md_format = auto_config.get('md_format', 'cfg')
         # Use the 'name' field to build the pickle filename. For example, if name is "bulk_BCC":
-        auto_pickle_file = f"{auto_config.get('name', 'auto')}.pickle"
+        auto_pickle_file = f"{auto_config.get('name', 'auto')}_auto_data.pickle"
+        auto_config['pickle_data'] = auto_pickle_file
         
         print_fancy_header(f"Running descriptor computation for Auto configuration")
         print(f"Directory: {auto_directory}")
@@ -114,8 +115,9 @@ if __name__ == "__main__":
         cd_auto.compute()
         os.chdir(cdir)
     ## For each Custom reference configuration:
-    print(custom_config)
     os.system('pwd')
+    print_config("Auto Configuration", auto_config)
+    
     
     if custom_config:
         for ref in custom_config:
@@ -123,26 +125,27 @@ if __name__ == "__main__":
             ref_directory = ref.get('directory', './')
             dir_where, dir_name = split_path(ref_directory)
             ref_md_format = ref.get('md_format', 'cfg')
-            ref_pickle_file = f"{ref.get('name', 'ref')}.pickle"
-            
+            ref_pickle_file = f"{ref.get('name', 'ref')}_ref_data.pickle"
+            ref['pickle_data'] = ref_pickle_file   
             print_fancy_header(f"Running descriptor computation for Custom Reference: {ref.get('name', 'ref')}")
             print(f"Directory: {ref_directory}")
             print(f"MD file format: {ref_md_format}")
             print(f"Output pickle file: {ref_pickle_file}\n")
+            
             os.chdir(dir_where)         
             cd_custom = ComputeDescriptor(path_bulk=dir_name,
                                           pickle_data_file=ref_pickle_file,
                                           md_format=ref_md_format)
             cd_custom.compute()  
             os.chdir(cdir)
-
+    print_config("Custom Configuration", {"References": custom_config})
     # ---------------------------------------------------------
     # Build models get the references ... 
     #----------------------------------------------------------
     os.system('pwd')
     
     try:
-        builder = ReferenceBuilder(auto_config=auto_config, custom_config=custom_config)
+        builder = ReferenceBuilder(species='Fe', auto_config=auto_config, custom_config=custom_config)
         
         if auto_config:
             builder.process_auto_config()

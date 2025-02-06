@@ -358,9 +358,13 @@ class UNSEENConfigParser:
         for r in ranges:
             if '-' in r:
                 start, end = map(int, r.split('-'))
-                ids.extend(range(start, end + 1))
+                #ids.extend(range(start, end + 1))
+                # python baby ! 
+                ids.extend(range(start-1, end))
             else:
-                ids.append(int(r))
+                #ids.append(int(r))
+                # python baby ! 
+                ids.append(int(r)-1)
         return ids
 
     def parse_mcd(self, mcd_elem: ET.Element | None) -> Dict[str, Any]:

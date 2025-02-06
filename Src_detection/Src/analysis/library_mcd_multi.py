@@ -48,6 +48,19 @@ class NormDescriptorHistogram :
         """ 
         if nb_bin is None :
             nb_bin = int(0.05*len(list_atoms))
+        
+        """
+        for i, ats in enumerate(list_atoms):
+            print(f"Atoms object {i} has arrays: {list(ats.arrays.keys())}")
+        
+        this is the output:  
+  
+          Atoms object 0 has arrays: ['numbers', 'positions']
+          Atoms object 1 has arrays: ['numbers', 'positions']
+          Atoms object 2 has arrays: ['numbers', 'positions']
+          Atoms object 3 has arrays: ['numbers', 'positions']
+          Atoms object 4 has arrays: ['numbers', 'positions']
+        """  
 
         self.descriptors = np.concatenate([ats.get_array('milady-descriptors') for ats in list_atoms], axis=0)
         self.nb_bin = nb_bin
@@ -200,17 +213,25 @@ class MetricAnalysisObject :
                         nb_bin = 100, 
                         nb_selected=10000) -> None : 
         """Perform MCD analysis for a given species
-        
-        TODO write doc
+        species : str is the chemical symbol of the species to analyze e.g. 'U', 'O', 'Cu
+        name_model : str is the name of the model to store
+        list_atoms : List[Atoms] is the list of Atoms object to analyze
+        contamination : float is the contamination rate for the MCD analysis
+        nb_bin : int is the number of bin for the histogram
+        nb_selected : int is the number of selected atoms for the MCD analysis
         """
-        if list_atoms is None : 
-            list_atom_species = self._get_all_atoms_species(species)
-        else : 
-            list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
+        #TODO_cos the version list do not work ... WTF! 
+        #if list_atoms is None : 
+        list_atom_species = self._get_all_atoms_species(species)
+        #else : 
+        #    list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
 
         print()
         print('... Starting histogram procedure ...')
+        print('list_atom_species ', list_atom_species)
+        print('nb_bin', nb_bin)
         histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin)
+        print('... Histogram selection begins ... ')
         array_desc_selected = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
         print(array_desc_selected.shape)
         print('... Histogram selection is done ...')
@@ -230,8 +251,22 @@ class MetricAnalysisObject :
                                                                    species)
         #mcd distribution 
         fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14,6))
-        list_mcd = np.concatenate([at.get_array(f'mcd-distance-{name_model}') for at in updated_atoms], axis=0)
+        
+        #list_mcd = np.concatenate([at.get_array(f'mcd-distance-{name_model}') for at in updated_atoms], axis=0)
+        list_mcd_arrays = []
+        for at in updated_atoms:
+            if f'mcd-distance-{name_model}' in at.arrays:
+                list_mcd_arrays.append(at.get_array(f'mcd-distance-{name_model}'))
+            else:
+                print(f"Warning: Atom object missing array: {f'mcd-distance-{name_model}'}")
+        if list_mcd_arrays:
+            list_mcd = np.concatenate(list_mcd_arrays, axis=0)
+        else:
+            raise ValueError("No valid mcd distance arrays found!")
+        
+        
         n, _, patches = axis[0].hist(list_mcd,density=True,bins=50,alpha=0.7)
+        
         for i in range(len(patches)):
             patches[i].set_facecolor(plt.cm.viridis(n[i]/max(n)))        
 
@@ -286,7 +321,7 @@ class MetricAnalysisObject :
             list_atom_species = self._get_all_atoms_species(species)
         else : 
             list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
-
+                 
         print()
         print('... Starting histogram procedure ...')
         histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin_histo)

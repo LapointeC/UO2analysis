@@ -21,7 +21,7 @@ class MetaModel :
             self.meta_data : Dict[str,Any] = {}
 
     def _sanity_check(self, kind : str) -> None : 
-        implemented_kind = ['GMM', 'MCD', 'Mahalanobis']
+        implemented_kind = ['GMM', 'MCD', 'MAHA']
         if kind not in implemented_kind :
             raise NotImplementedError(f'... Model type {kind} is not implemented ...')
 
@@ -81,11 +81,12 @@ class MetaModel :
                                                               kwargs['dict_gaussian'])
         elif kind == 'MCD' :
             self.meta[name_model] = MCDModel()
+            self.meta[name_model]._update_name(name_model)
             self.meta[name_model]._fit_mcd_model(desc_selected,
                                                  species,
                                                  kwargs['contamination'])
             
-        elif kind == 'Mahalanobis' : 
+        elif kind == 'MAHA' : 
             self.meta[name_model] = MahalanobisModel()
             self.meta[name_model]._fit_mahalanobis_model(desc_selected,
                                                          species)
@@ -116,7 +117,7 @@ class MetaModel :
         elif kind == 'MCD' :
             self.meta[name_model]._fit_mcd_distribution(distances,
                                                         species) 
-        elif kind == 'Mahalanobis' : 
+        elif kind == 'MAHA' : 
             self.meta[name_model]._fit_mahalanobis_distribution(distances,
                                                                 species)
 
@@ -151,7 +152,7 @@ class MetaModel :
         elif kind == 'MCD' :
             return self.meta[name_model]._predict_mcd_probability(distances, species)
         
-        elif kind == 'Mahalanobis' : 
+        elif kind == 'MAHA' : 
             return self.meta[name_model]._predict_mahalanobis_probability(distances, species)
 
 
@@ -187,7 +188,7 @@ class MetaModel :
             return self.meta[name_model]._get_mcd_distance(list_atoms,
                                                            species)
 
-        elif kind == 'Mahalanobis' : 
+        elif kind == 'MAHA' : 
             return self.meta[name_model]._get_mahalanobis_distance(list_atoms,
                                                                    species)  
 

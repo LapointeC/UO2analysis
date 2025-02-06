@@ -1,5 +1,5 @@
 import numpy as np
-
+import pickle
 import os
 from ase.io import read
 from ase import Atoms
@@ -14,7 +14,7 @@ from ..parser import BaseParser
 import matplotlib
 matplotlib.use('Agg')
 
-from typing import Dict, Any, List 
+from typing import Dict, Any, List, Union  
 
 
 #class ReferenceBuilder : 
@@ -95,7 +95,7 @@ from typing import Dict, Any, List
     
     
 class ReferenceBuilder:
-    def __init__(self, auto_config: dict, custom_config: List[dict]) -> None:
+    def __init__(self, species: str,  auto_config: dict, custom_config: List[dict]) -> None:
         """
         Initialize with configuration dictionaries from UNSEENConfigParser
         
@@ -106,9 +106,12 @@ class ReferenceBuilder:
         custom_config : List[dict]
             List of dictionaries for Custom references
         """
+        #TODO_cos this should be changed I keep here it in order to be compatible with the former version ... 
+        self.species = species
         self.auto_config = auto_config
         self.custom_config = custom_config
-        self.meta_metric = MetricAnalysisObject()
+        
+        
 
     def process_auto_config(self) -> None:
         """Process the Auto configuration from provided dictionary"""
@@ -121,17 +124,20 @@ class ReferenceBuilder:
         print("="*50)
         
         directory = self.auto_config['directory']
-        species = self.auto_config['name']
+        #TODO_cos this should be changed I keep here it in order to be compatible with the former version ... 
+        name_label = self.auto_config['name']
+        
 
         for model_kind in ['MCD', 'GMM', 'MAHA']:
             if self.auto_config['models'].get(model_kind, False):
-                print(f"\nBuilding {model_kind} model for {species}")
+                print(f"\nBuilding {model_kind} model for {name_label}")
                 self._build_model(
                     config=self.auto_config,
                     directory=directory,
-                    species=species,
-                    model_kind=model_kind,
-                    name_model=f"Auto_{model_kind}"
+                    species=self.species,
+                    name_label = name_label,
+                    model_kind = model_kind,
+                    name_model=f"Auto_{name_label}"
                 )
 
     def process_custom_references(self) -> None:
@@ -147,36 +153,53 @@ class ReferenceBuilder:
         for ref in self.custom_config:
             print(f"\nProcessing reference: {ref['name']}")
             directory = ref['directory']
-            species = ref['name'].split('_')[-1]  # Extract species from name
-
+            #species = ref['name'].split('_')[-1]  # Extract species from name
+            name_label = ref['name']
             for model_kind in ['MCD', 'GMM', 'MAHA']:
                 if ref['models'].get(model_kind, False):
-                    print(f"Building {model_kind} model for {species}")
+                    print(f"Building {model_kind} model for {name_label}")
                     self._build_model(
                         config=ref,
                         directory=directory,
-                        species=species,
-                        model_kind=model_kind,
-                        name_model=ref['name']
+                        species=self.species,
+                        name_label = name_label, 
+                        model_kind = model_kind,
+                        name_model=f"Auto_{name_label}"
                     )
-
+                    
     def _build_model(self, config: dict, directory: str, species: str,
-                    model_kind: str, name_model: str) -> None:
+                    name_label: str, model_kind: str, name_model: str) -> None:
         """Internal method to handle model building"""
         # Validate directory exists
         if not os.path.exists(directory):
             raise FileNotFoundError(f"Directory {directory} not found for {name_model}")
+        
+        
+        # Remove any trailing slashes (unless the path is just '/' itself)
+        normalized_path = directory.rstrip(os.sep)
+        # Get the parent directory
+        parent = os.path.dirname(normalized_path)
+        # Add a trailing slash if needed and if parent is not empty
+        if parent and not parent.endswith(os.sep):
+            parent += os.sep
+        file_data_pickle = os.path.join(parent, config['pickle_data'])
+        if not os.path.exists(file_data_pickle):
+            raise FileNotFoundError(f"Data pickle file {file_data_pickle} not found for {name_model}")
+    
+        previous_dbmodel = pickle.load(open(file_data_pickle,'rb'))
+        self.meta_metric = MetricAnalysisObject(previous_dbmodel)
+
 
         # Get model parameters from config
-        model_params = config.get(model_kind, {})
+        model_params = config.get(name_label, {})
         
-        #debug_cos print(config)
-        #debug_cos print(directory)
-        #debug_cos print(species)
-        #debug_cos print(model_kind)
-        #debug_cos print(name_model)
-        #debug_cos os.system('pwd')
-        #debug_cos exit(0) 
+        #debig_cos print('Config', config)        
+        #debig_cos print(directory)
+        #debig_cos print(species)
+        #debig_cos print(model_kind)
+        #debig_cos print(name_model)
+        #debig_cos os.system('pwd')
+        #debig_cos exit(0) 
         
         # Read configuration files
         list_config_file = [
@@ -203,6 +226,7 @@ class ReferenceBuilder:
             #'mixed':  'lammps-dump-text',  
             #'unseen': 'lammps-dump-text'
         }  
+
         for file in list_config_file:
             try:
                 # this read_function should be improved ....  
@@ -210,18 +234,35 @@ class ReferenceBuilder:
                     print(f"Malheur: extension of {file } not match the input c{config.get('md_format', 'cfg')} ")
                     exit(1)
                 # Get the appropriate format string for ASE.read, defaulting to 'lammps-dump-text' if not mapped.
+                
                 read_format = format_mapping.get(config.get('md_format', 'cfg'), 'lammps-dump-text')    
                 #atoms = read(file, format=self._get_extension(file))
                 atoms = read(file, format=read_format)
-                #TODO_cos selection_mask and id_atoms  
+
+                #TODO_cos we should unify selection_mask and id_atoms
+                nat = len(atoms)
+                if 'id_atoms' in config:
+                   if config['id_atoms'] == 'all' : 
+                       list_selected = list(range(nat))
+                   else :    
+                       list_selected = config['id_atoms']
+                       
+                   print('First', atoms)                               
+                   atoms = atoms[list_selected]      
+                   print('Second', atoms)                               
+
                 if 'selection_mask' in config:  # If using selection mask from config
                    atoms = atoms[config['selection_mask']]
-                if config['id_atoms'] != 'all' : 
-                   atoms = atoms[config['id_atoms']] 
+                
                 list_atoms.append(atoms)
             except Exception as e:
                 print(f"Error reading {file}: {str(e)}")
                 continue
+
+        print('HALLOOOOOOOOOOOOOOO')
+        print(config['id_atoms'])
+        print('LUUUUUUUUUL', list_config_file)
+        print(config)
 
         # Build the specified model
         try:
@@ -256,6 +297,8 @@ class ReferenceBuilder:
             print(f"Successfully built {model_kind} model for {species}")
         except Exception as e:
             print(f"Error building {model_kind} model: {str(e)}")
+        print('Here is the exit 0)')
+        exit(0) 
 
     def _get_extension(self, file: str) -> str:
         return os.path.basename(file).split('.')[-1]
