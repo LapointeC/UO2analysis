@@ -164,7 +164,7 @@ class ReferenceBuilder:
                         species=self.species,
                         name_label = name_label, 
                         model_kind = model_kind,
-                        name_model=f"Auto_{name_label}"
+                        name_model=f"Refs_{name_label}"
                     )
                     
     def _build_model(self, config: dict, directory: str, species: str,
@@ -184,7 +184,7 @@ class ReferenceBuilder:
             parent += os.sep
         file_data_pickle = os.path.join(parent, config['pickle_data'])
         if not os.path.exists(file_data_pickle):
-            raise FileNotFoundError(f"Data pickle file {file_data_pickle} not found for {name_model}")
+            raise FileNotFoundError(f"Data pickle file with descriptors {file_data_pickle} not found for {name_model}")
     
         previous_dbmodel = pickle.load(open(file_data_pickle,'rb'))
         self.meta_metric = MetricAnalysisObject(previous_dbmodel)
@@ -215,7 +215,7 @@ class ReferenceBuilder:
         list_atoms = []
         #TODO_cos unify with other places 
         # Define the allowed file extensions and a mapping to ASE read formats. 
-        allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
+        #allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
         format_mapping = {
             'cfg':    'cfg',  # same as before
             'dump':   'lammps-dump-text',
@@ -246,10 +246,8 @@ class ReferenceBuilder:
                        list_selected = list(range(nat))
                    else :    
                        list_selected = config['id_atoms']
-                       
-                   print('First', atoms)                               
+                                                                 
                    atoms = atoms[list_selected]      
-                   print('Second', atoms)                               
 
                 if 'selection_mask' in config:  # If using selection mask from config
                    atoms = atoms[config['selection_mask']]
@@ -259,10 +257,10 @@ class ReferenceBuilder:
                 print(f"Error reading {file}: {str(e)}")
                 continue
 
-        print('HALLOOOOOOOOOOOOOOO')
-        print(config['id_atoms'])
-        print('LUUUUUUUUUL', list_config_file)
-        print(config)
+        #debug_cos print('HALLOOOOOOOOOOOOOOO')
+        #debug_cos print(config['id_atoms'])
+        #debug_cos print('LUUUUUUUUUL', list_config_file)
+        #debug_cos print(config)
 
         # Build the specified model
         try:

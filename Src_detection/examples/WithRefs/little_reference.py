@@ -147,11 +147,11 @@ if __name__ == "__main__":
     try:
         builder = ReferenceBuilder(species='Fe', auto_config=auto_config, custom_config=custom_config)
         
-        if auto_config:
-            builder.process_auto_config()
+        #if auto_config:
+        #    builder.process_auto_config()
         
-        # if custom_config:
-        #     builder.process_custom_references()
+        if custom_config:
+             builder.process_custom_references()
             
         print("\n" + "="*50)
         print("Model Building Complete".center(50))

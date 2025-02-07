@@ -56,7 +56,7 @@ class MahalanobisModel :
         cov_desc = np.cov(desc_selected.T)
         inv_covmat = np.linalg.pinv(cov_desc)
 
-        self.models[species]['mean_vector'] = mean_vector
+        self.models[species]['mean_vector'] = mean_vector[:,None]
         self.models[species]['inv_covariance_matrix'] = inv_covmat
         return 
     
@@ -121,9 +121,16 @@ class MahalanobisModel :
             mean_vector = self.models[species]['mean_vector']
             inv_covariance = self.models[species]['inv_covariance_matrix']
             desc = atoms.get_array('milady-descriptors')
-
-            mcd_distance = np.sqrt( np.trace( ( desc - mean_vector )@inv_covariance@( desc.T - mean_vector ) ) )
-            atoms.set_array(f'mahalanobis-distance-{self.name}',np.sqrt(mcd_distance), dtype=float)
+            #debug_cos ... I change that  
+            #mcd_distance = np.sqrt( np.trace( ( desc - mean_vector )@inv_covariance@( desc.T - mean_vector ) ) )
+            # into that ... 
+            dist_matrix = ( desc - mean_vector.T )@inv_covariance@( desc.T - mean_vector )  
+            dist = np.diagonal(dist_matrix)
+            mcd_distance = np.sign(dist) * np.sqrt(np.abs(dist))
+            #debug_cos I replaced that ...
+            #atoms.set_array(f'mahalanobis-distance-{self.name}',np.sqrt(mcd_distance), dtype=float)
+            #debug_cos into that ...
+            atoms.set_array(f'mahalanobis-distance-{self.name}',mcd_distance, dtype=float)
 
         [local_setting_mahalanobis(atoms) for atoms in list_atoms]
 

@@ -380,24 +380,26 @@ class MetricAnalysisObject :
         
         TODO write doc
         """
-        if list_atoms is None : 
-            list_atom_species = self._get_all_atoms_species(species)
-        else : 
-            list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
+        #TODO_cos the version list do not work ... 
+        #if list_atoms is None : 
+        list_atom_species = self._get_all_atoms_species(species)
+        #else : 
+        #    list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
 
-        array_desc_selected = np.concatenate([ ats.get_array('milady_descriptor') for ats in list_atom_species ])
+        array_desc_selected = np.concatenate([ ats.get_array('milady-descriptors') for ats in list_atom_species ])
         print('... Starting Mahalanobis fit for {:} atoms ...'.format(species))
         self.meta_model._fit_model(array_desc_selected, 
                                    name_model,
-                                   'Mahalanobis', 
+                                   'MAHA', 
                                    species)
 
         print('... Mahalanobis envelop is fitted ...')
         updated_atoms = self.meta_model._get_statistical_distances(list_atom_species, 
                                                                    name_model, 
-                                                                   'Mahalanobis', 
+                                                                   'MAHA', 
                                                                    species)
         #mcd distribution 
+        print('... Starting Mahalanobis analysis for {:s} atoms ...'.format(species))
         fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14,6))
         list_mcd = np.concatenate([at.get_array(f'mahalanobis-distance-{name_model}') for at in updated_atoms], axis=0)
         n, _, patches = axis[0].hist(list_mcd,density=True,bins=50,alpha=0.7)
@@ -413,7 +415,7 @@ class MetricAnalysisObject :
         # kde estimation
         self.meta_model._fit_distribution(np.array(list_mcd), 
                                           name_model, 
-                                          'Mahalanobis', 
+                                          'MAHA', 
                                           species)
 
         axis[0].set_xlabel(r'Mahalanobis distance $d_{\textrm{Maha}}$ for %s atoms'%(species))

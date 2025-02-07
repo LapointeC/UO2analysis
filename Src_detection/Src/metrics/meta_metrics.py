@@ -89,6 +89,7 @@ class MetaModel :
             
         elif kind == 'MAHA' : 
             self.meta[name_model] = MahalanobisModel()
+            self.meta[name_model]._update_name(name_model)
             self.meta[name_model]._fit_mahalanobis_model(desc_selected,
                                                          species)
 
