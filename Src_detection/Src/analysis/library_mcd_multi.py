@@ -310,17 +310,18 @@ class MetricAnalysisObject :
                         list_atoms : List[Atoms] = None,
                         nb_bin_histo : int =100, 
                         nb_selected :int = 10000, 
-                        dict_gaussian : dict = {'n_components':2,
+                        dict_gaussian : dict = {'n_components':2, 'max_iter':100,
                                                             'covariance_type':'full',
                                                             'init_params':'kmeans'}) -> None : 
         """Perform MCD analysis for a given species
         
         TODO Same write doc 
         """
-        if list_atoms is None : 
-            list_atom_species = self._get_all_atoms_species(species)
-        else : 
-            list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
+        #TODO_cos the version list do not work ... WTF!
+        #if list_atoms is None : 
+        list_atom_species = self._get_all_atoms_species(species)
+        #else : 
+        #    list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
                  
         print()
         print('... Starting histogram procedure ...')

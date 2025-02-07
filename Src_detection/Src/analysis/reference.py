@@ -276,7 +276,10 @@ class ReferenceBuilder:
                     dict_gaussian=model_params.get('dic_gaussian', {
                         'n_components': 2,
                         'covariance_type': 'full',
-                        'init_params': 'kmeans'
+                        'init_params': 'kmeans',
+                        'max_iter': 100,
+                        'weight_concentration_prior_type':'dirichlet_process',
+                        'weight_concentration_prior':0.5
                     })
                 )
             elif model_kind == 'MCD':
@@ -297,8 +300,8 @@ class ReferenceBuilder:
             print(f"Successfully built {model_kind} model for {species}")
         except Exception as e:
             print(f"Error building {model_kind} model: {str(e)}")
-        print('Here is the exit 0)')
-        exit(0) 
+        #print('Here is the exit 0)')
+        #exit(0) 
 
     def _get_extension(self, file: str) -> str:
         return os.path.basename(file).split('.')[-1]

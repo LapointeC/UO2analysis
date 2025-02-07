@@ -76,6 +76,7 @@ class MetaModel :
         
         if kind == 'GMM' : 
             self.meta[name_model] = GMMModel()
+            self.meta[name_model]._update_name(name_model)
             self.meta[name_model]._fit_gaussian_mixture_model(desc_selected,
                                                               species,
                                                               kwargs['dict_gaussian'])
