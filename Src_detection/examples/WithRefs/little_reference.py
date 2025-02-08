@@ -100,7 +100,10 @@ if __name__ == "__main__":
         auto_md_format = auto_config.get('md_format', 'cfg')
         # Use the 'name' field to build the pickle filename. For example, if name is "bulk_BCC":
         auto_pickle_file = f"{auto_config.get('name', 'auto')}_auto_data.pickle"
+        auto_pickel_model = f"{auto_config.get('name', 'auto')}_auto_model.pickle"
         auto_config['pickle_data'] = auto_pickle_file
+        auto_config['pickle_model'] = auto_pickel_model
+        
         
         print_fancy_header(f"Running descriptor computation for Auto configuration")
         print(f"Directory: {auto_directory}")
@@ -126,7 +129,10 @@ if __name__ == "__main__":
             dir_where, dir_name = split_path(ref_directory)
             ref_md_format = ref.get('md_format', 'cfg')
             ref_pickle_file = f"{ref.get('name', 'ref')}_ref_data.pickle"
+            ref_pickle_model = f"{ref.get('name', 'ref')}_ref_model.pickle"
             ref['pickle_data'] = ref_pickle_file   
+            ref['pickle_model'] = ref_pickle_model
+               
             print_fancy_header(f"Running descriptor computation for Custom Reference: {ref.get('name', 'ref')}")
             print(f"Directory: {ref_directory}")
             print(f"MD file format: {ref_md_format}")
@@ -147,8 +153,8 @@ if __name__ == "__main__":
     try:
         builder = ReferenceBuilder(species='Fe', auto_config=auto_config, custom_config=custom_config)
         
-        #if auto_config:
-        #    builder.process_auto_config()
+        if auto_config:
+            builder.process_auto_config()
         
         if custom_config:
              builder.process_custom_references()

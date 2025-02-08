@@ -175,14 +175,14 @@ class ReferenceBuilder:
             raise FileNotFoundError(f"Directory {directory} not found for {name_model}")
         
         
-        # Remove any trailing slashes (unless the path is just '/' itself)
-        normalized_path = directory.rstrip(os.sep)
-        # Get the parent directory
-        parent = os.path.dirname(normalized_path)
-        # Add a trailing slash if needed and if parent is not empty
-        if parent and not parent.endswith(os.sep):
-            parent += os.sep
-        file_data_pickle = os.path.join(parent, config['pickle_data'])
+        # # Remove any trailing slashes (unless the path is just '/' itself)
+        # normalized_path = directory.rstrip(os.sep)
+        # # Get the parent directory
+        # parent = os.path.dirname(normalized_path)
+        # # Add a trailing slash if needed and if parent is not empty
+        # if parent and not parent.endswith(os.sep):
+        #     parent += os.sep
+        file_data_pickle = os.path.join(config['directory_path'], config['pickle_data'])
         if not os.path.exists(file_data_pickle):
             raise FileNotFoundError(f"Data pickle file with descriptors {file_data_pickle} not found for {name_model}")
     
@@ -263,6 +263,7 @@ class ReferenceBuilder:
         #debug_cos print(config)
 
         # Build the specified model
+        where_is_the_model = os.path.join(config['directory_path'],config['pickle_model'])
         try:
             if model_kind == 'GMM':
                 self.meta_metric.fit_gmm_envelop(
@@ -280,6 +281,7 @@ class ReferenceBuilder:
                         'weight_concentration_prior':0.5
                     })
                 )
+                self.meta_metric.store_model_pickle(f'{where_is_the_model}')
             elif model_kind == 'MCD':
                 self.meta_metric.fit_mcd_envelop(
                     species=species,
@@ -289,12 +291,16 @@ class ReferenceBuilder:
                     nb_bin=model_params.get('nb_bin_histo', 100),
                     nb_selected=model_params.get('nb_selected', 10000)
                 )
+                self.meta_metric.store_model_pickle(f'{where_is_the_model}')    
+                
             elif model_kind == 'MAHA':
                 self.meta_metric.fit_mahalanobis_envelop(
                     species=species,
                     name_model=name_model,
                     list_atoms=list_atoms
                 )
+                self.meta_metric.store_model_pickle(f'{where_is_the_model}')
+                
             print(f"Successfully built {model_kind} model for {species}")
         except Exception as e:
             print(f"Error building {model_kind} model: {str(e)}")

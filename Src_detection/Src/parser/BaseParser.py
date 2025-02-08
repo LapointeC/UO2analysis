@@ -249,6 +249,18 @@ class UNSEENConfigParser:
         self.auto_config['name'] = element.findtext('name', default='main_analysis').strip()
         self.auto_config['directory'] = element.findtext('directory', default='./').strip()
         
+        
+        # Remove any trailing slashes (unless the path is just '/' itself)
+        normalized_path = self.auto_config['directory'].rstrip(os.sep)
+        # Get the parent directory
+        parent = os.path.dirname(normalized_path)
+        # Add a trailing slash if needed and if parent is not empty
+        if parent and not parent.endswith(os.sep):
+           parent += os.sep
+        self.auto_config['directory_path'] = parent 
+        self.auto_config['directory_name'] = os.path.basename(normalized_path)
+        #debug_cos print('DIRECTORIESSSSSSSS  ', self.auto_config['directory'], self.auto_config['directory_path'], self.auto_config['directory_name'])
+        
         # Convert to a pathlib object
         directory_path = pathlib.Path(self.auto_config['directory'])
         
@@ -302,6 +314,19 @@ class UNSEENConfigParser:
             ref['name'] = ref_elem.findtext('name', default='ref_01').strip()
             ref['directory'] = ref_elem.findtext('directory', default='./References').strip()
             # Convert to a pathlib object
+            
+            # Remove any trailing slashes (unless the path is just '/' itself)
+            normalized_path = ref['directory'].rstrip(os.sep)
+            # Get the parent directory
+            parent = os.path.dirname(normalized_path)
+            # Add a trailing slash if needed and if parent is not empty
+            if parent and not parent.endswith(os.sep):
+               parent += os.sep
+            ref['directory_path'] = parent 
+            ref['directory_name'] = os.path.basename(normalized_path)
+            #debug_cos print('DIRECTORIESSSSSSSS  ', ref['directory'], ref['directory_path'], ref['directory_name'])
+            
+            
             directory_path = pathlib.Path(ref['directory'])
             
             # Check if the directory exists and is not a symbolic link
