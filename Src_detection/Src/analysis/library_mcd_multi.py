@@ -228,12 +228,11 @@ class MetricAnalysisObject :
 
         print()
         print('... Starting histogram procedure ...')
-        print('list_atom_species ', list_atom_species)
-        print('nb_bin', nb_bin)
+        #debug_cos print('list_atom_species ', list_atom_species)
+        #debug_cos print('nb_bin', nb_bin)
         histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin)
-        print('... Histogram selection begins ... ')
         array_desc_selected = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
-        print(array_desc_selected.shape)
+        #debug_cos print(array_desc_selected.shape)
         print('... Histogram selection is done ...')
         print()
 
@@ -443,6 +442,7 @@ class MetricAnalysisObject :
 
 #######################################################
     
+
 def custom_writer(atoms : Atoms, path : str, property : str = 'mcd-distance',**kwargs) : 
     """TODO Write doc"""
     if property == 'logistic-score' : 
@@ -469,3 +469,6 @@ def custom_writer(atoms : Atoms, path : str, property : str = 'mcd-distance',**k
         for id, pos in enumerate(atoms.get_positions()) : 
             w.write('{:5d} {:2d} {:3.9f} {:3.9f} {:3.9f} {:3.9f} \n'.format(id+1,dic[atoms[id].symbol],atoms_property[id],pos[0],pos[1],pos[2]))
     return
+
+
+

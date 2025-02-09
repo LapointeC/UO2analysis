@@ -6,7 +6,7 @@ sys.path.insert(0,'/home/marinica/GitHub/UO2analysis.git/Src_detection')
 os.system('pwd') 
 #from Src import ReferenceBuilder
 from Src.parser.BaseParser import UNSEENConfigParser
-from Src.analysis.reference import ReferenceBuilder
+from Src.analysis.reference import ReferenceBuilder, InferenceBuilder
 from Src.mld.milady import ComputeDescriptor
 
 
@@ -93,17 +93,17 @@ if __name__ == "__main__":
     #put current directory into some variable: 
     cdir = os.getcwd()
     
+    milady_compute = False
+    unseen_train = True 
+    unseen_inference = True 
+    
     if auto_config:
         # Get the MD files directory, MD file format, and a name for the pickle file
         auto_directory = auto_config.get('directory', './')
         dir_where, dir_name = split_path(auto_directory)
         auto_md_format = auto_config.get('md_format', 'cfg')
         # Use the 'name' field to build the pickle filename. For example, if name is "bulk_BCC":
-        auto_pickle_file = f"{auto_config.get('name', 'auto')}_auto_data.pickle"
-        auto_pickel_model = f"{auto_config.get('name', 'auto')}_auto_model.pickle"
-        auto_config['pickle_data'] = auto_pickle_file
-        auto_config['pickle_model'] = auto_pickel_model
-        
+        auto_pickle_file = auto_config.get('pickle_data', 'auto_data.pickle')
         
         print_fancy_header(f"Running descriptor computation for Auto configuration")
         print(f"Directory: {auto_directory}")
@@ -111,12 +111,13 @@ if __name__ == "__main__":
         print(f"Output pickle file: {auto_pickle_file}\n")
         
         # Create an instance of ComputeDescriptor with the XML options
-        os.chdir(dir_where)
-        cd_auto = ComputeDescriptor(path_bulk=dir_name,
-                                    pickle_data_file=auto_pickle_file,
-                                    md_format=auto_md_format)
-        cd_auto.compute()
-        os.chdir(cdir)
+        if milady_compute:
+           os.chdir(dir_where)
+           cd_auto = ComputeDescriptor(path_bulk=dir_name,
+                                       pickle_data_file=auto_pickle_file,
+                                       md_format=auto_md_format)
+           cd_auto.compute()
+           os.chdir(cdir)
     ## For each Custom reference configuration:
     os.system('pwd')
     print_config("Auto Configuration", auto_config)
@@ -128,41 +129,84 @@ if __name__ == "__main__":
             ref_directory = ref.get('directory', './')
             dir_where, dir_name = split_path(ref_directory)
             ref_md_format = ref.get('md_format', 'cfg')
-            ref_pickle_file = f"{ref.get('name', 'ref')}_ref_data.pickle"
-            ref_pickle_model = f"{ref.get('name', 'ref')}_ref_model.pickle"
-            ref['pickle_data'] = ref_pickle_file   
-            ref['pickle_model'] = ref_pickle_model
+            ref_pickle_file = ref.get('pickle_data', 'ref_data.pickle')
                
             print_fancy_header(f"Running descriptor computation for Custom Reference: {ref.get('name', 'ref')}")
             print(f"Directory: {ref_directory}")
             print(f"MD file format: {ref_md_format}")
             print(f"Output pickle file: {ref_pickle_file}\n")
-            
-            os.chdir(dir_where)         
-            cd_custom = ComputeDescriptor(path_bulk=dir_name,
-                                          pickle_data_file=ref_pickle_file,
-                                          md_format=ref_md_format)
-            cd_custom.compute()  
-            os.chdir(cdir)
+          
+            if milady_compute:  
+               os.chdir(dir_where)         
+               cd_custom = ComputeDescriptor(path_bulk=dir_name,
+                                             pickle_data_file=ref_pickle_file,
+                                             md_format=ref_md_format)
+               cd_custom.compute()  
+               os.chdir(cdir)
     print_config("Custom Configuration", {"References": custom_config})
     # ---------------------------------------------------------
     # Build models get the references ... 
     #----------------------------------------------------------
     os.system('pwd')
     
-    try:
-        builder = ReferenceBuilder(species='Fe', auto_config=auto_config, custom_config=custom_config)
-        
-        if auto_config:
-            builder.process_auto_config()
-        
-        if custom_config:
-             builder.process_custom_references()
+    if unseen_train:
+        try:
+            builder = ReferenceBuilder(species='Fe', auto_config=auto_config, custom_config=custom_config)
             
-        print("\n" + "="*50)
-        print("Model Building Complete".center(50))
-        print("="*50)
+            if auto_config:
+                builder.process_auto_config()
+            
+            if custom_config:
+                 builder.process_custom_references()
+                
+            print("\n" + "="*50)
+            print("Model Building Complete".center(50))
+            print("="*50)
+            
+        except Exception as e:
+            print(f"\nError during model building: {str(e)}")
+            sys.exit(1)
+            
+    if unseen_inference: 
         
-    except Exception as e:
-        print(f"\nError during model building: {str(e)}")
-        sys.exit(1)
+        print("\n" + "="*50)
+        print("Inference Time".center(50))
+        print("="*50)
+        inference_config = custom_parser.inference_config
+        print_config("Inference Configuration", inference_config)
+    
+        milady_compute = True 
+        
+        # Extract parameters for inference
+        inf_directory = inference_config.get('directory', './')
+        inf_dir_name = inference_config['directory_name']
+        inf_dir_where = inference_config['directory_path']
+        #inf_dir_where, inf_dir_name = split_path(inf_directory)
+        inf_md_format = inference_config.get('md_format', 'cfg')
+        # Create a pickle file name for the inference configuration:
+        inf_pickle_file = f"{inference_config.get('name', 'inference')}_inf_data.pickle"
+        print_fancy_header(f"Running descriptor computation for Inference: {inference_config.get('name', 'inference')}")
+        print(f"Directory: {inf_directory}")
+        print(f"MD file format: {inf_md_format}")
+        print(f"Output pickle file: {inf_pickle_file}\n")
+        if milady_compute:
+            # Change to the parent directory of the inference directory
+            os.chdir(inf_dir_where)
+            cd_inference = ComputeDescriptor(
+                path_bulk=inf_dir_name,
+                pickle_data_file=inf_pickle_file,
+                md_format=inf_md_format
+            )
+            cd_inference.compute()
+            os.chdir(cdir)    
+            
+        try: 
+            inference = InferenceBuilder(species='Fe', inference_config=inference_config, 
+                                        auto_config=auto_config, custom_config=custom_config)  
+            inference.run_auto_config()
+        except Exception as e:
+            print(f"\nError during model inference: {str(e)}")
+            sys.exit(1)
+            
+    
+            

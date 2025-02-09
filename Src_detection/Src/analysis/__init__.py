@@ -2,4 +2,4 @@ from .dfct_analysis import DfctAnalysisObject
 from .dfct_multi_model_analysis import DfctMultiAnalysisObject
 from .library_mcd import NormDescriptorHistogram, MCDAnalysisObject
 from .library_mcd_multi import MetricAnalysisObject
-from .reference import ReferenceBuilder
+from .reference import ReferenceBuilder, InferenceBuilder

@@ -4,6 +4,7 @@
             <name>bulk_C15</name>
             <directory>References/bulk_C15/</directory>
             <id_atoms>all</id_atoms>
+            <md_format>poscar</md_format>
             <model>MCD MAHA</model>
             <MCD>
                 <mcd_options>
@@ -12,6 +13,7 @@
             </MCD>
         </Reference>
         <Reference>
+            <md_format>poscar</md_format>
             <name>sia_110</name>
             <directory>References/sia_110/</directory>
             <model>GMM</model>
@@ -26,8 +28,9 @@
             </GMM>
         </Reference>
         <Reference>
-            <name>sia_110</name>
-            <directory>References/sia_110/</directory>
+            <md_format>poscar</md_format>
+            <name>bulk_A15</name>
+            <directory>References/bulk_A15/</directory>
             <model>MAHA</model>
              <id_atoms>1,2</id_atoms>
             <MAHA>
@@ -37,4 +40,13 @@
             </MAHA>
         </Reference>
     </Custom>
+
+    <Inference>
+      <name>FeFPA300K</name>
+      <directory>Analyze/data</directory>
+      <id_atoms>all</id_atoms>
+      <md_format>poscar</md_format>
+    </Inference>
 </Configuration>
+
+

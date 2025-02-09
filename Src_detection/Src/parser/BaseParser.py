@@ -204,6 +204,7 @@ class UNSEENConfigParser:
         self.xml_path = xml_path
         self.auto_config: Dict[str, Any] = {}
         self.custom_config: List[Dict[str, Any]] = []
+        self.inference_config: Dict[str, Any] = {}
         
         if os.path.exists(xml_path):
             self.tree = ET.parse(xml_path)
@@ -234,7 +235,9 @@ class UNSEENConfigParser:
             },
             'MAHA': {'nb_bin_histo': 100, 'nb_selected': 10000}
         }
-        self.custom_config = []        
+        self.custom_config = []  
+        self.inference_config = {}    
+          
 
     def parse(self) -> None:
         """Main parsing method to process Auto and Custom tags"""
@@ -243,6 +246,8 @@ class UNSEENConfigParser:
                 self.parse_auto(child)
             elif child.tag == 'Custom':
                 self.parse_custom(child)
+            elif child.tag == 'Inference':
+                self.parse_inference(child)
 
     def parse_auto(self, element: ET.Element) -> None:
         """Parse <Auto> configuration"""
@@ -260,6 +265,13 @@ class UNSEENConfigParser:
         self.auto_config['directory_path'] = parent 
         self.auto_config['directory_name'] = os.path.basename(normalized_path)
         #debug_cos print('DIRECTORIESSSSSSSS  ', self.auto_config['directory'], self.auto_config['directory_path'], self.auto_config['directory_name'])
+        
+        auto_pickle_file = f"{self.auto_config.get('name', 'ref')}_ref_data.pickle"
+        auto_pickle_model = f"{self.auto_config.get('name', 'ref')}_ref_model.pickle"
+        self.auto_config['pickle_data'] = auto_pickle_file   
+        self.auto_config['pickle_model'] = auto_pickle_model
+
+        
         
         # Convert to a pathlib object
         directory_path = pathlib.Path(self.auto_config['directory'])
@@ -326,6 +338,11 @@ class UNSEENConfigParser:
             ref['directory_name'] = os.path.basename(normalized_path)
             #debug_cos print('DIRECTORIESSSSSSSS  ', ref['directory'], ref['directory_path'], ref['directory_name'])
             
+            ref_pickle_file = f"{ref.get('name', 'ref')}_ref_data.pickle"
+            ref_pickle_model = f"{ref.get('name', 'ref')}_ref_model.pickle"
+            ref['pickle_data'] = ref_pickle_file   
+            ref['pickle_model'] = ref_pickle_model
+            
             
             directory_path = pathlib.Path(ref['directory'])
             
@@ -371,6 +388,43 @@ class UNSEENConfigParser:
             ref['MAHA'] = self.parse_maha(ref_elem.find('MAHA'))
             
             self.custom_config.append(ref)
+
+    def parse_inference(self, element: ET.Element) -> None:
+        """Parse <Inference> configuration"""
+        self.inference_config = {
+            'name': element.findtext('name', default='inference').strip(),
+            'directory': element.findtext('directory', default='./Inference').strip(),
+            'md_format': element.findtext('md_format', default='cfg').strip(),
+            'id_atoms': self.parse_id_atoms(element.findtext('id_atoms', default='all'))
+        }
+
+        # Validate MD format
+        allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
+        if self.inference_config['md_format'] not in allowed_formats:
+            print(f"Invalid md_format for Inference: '{self.inference_config['md_format']}'")
+            print(f"Allowed formats: {', '.join(allowed_formats)}")
+            sys.exit(1)
+
+        # Process directory paths
+        normalized_path = self.inference_config['directory'].rstrip(os.sep)
+        self.inference_config['directory_path'] = os.path.dirname(normalized_path)
+        self.inference_config['directory_name'] = os.path.basename(normalized_path)
+
+        # Validate directory exists
+        directory_path = pathlib.Path(self.inference_config['directory'])
+        if not directory_path.exists():
+            print(f"Inference directory {directory_path} does not exist")
+            sys.exit(1)
+        if not directory_path.is_dir():
+            print(f"Inference path {directory_path} is not a directory")
+            sys.exit(1)
+            
+        ref_pickle_file = f"{self.inference_config.get('name', 'infer')}_inf_data.pickle"
+        ref_pickle_model = f"{self.inference_config.get('name', 'infer')}_inf_model.pickle"
+        self.inference_config['pickle_data'] = ref_pickle_file   
+        self.inference_config['pickle_model'] = ref_pickle_model
+    
+
 
     def parse_id_atoms(self, id_text: str) -> List[int] | str:
         """Parse id_atoms string into list of integers or 'all'"""

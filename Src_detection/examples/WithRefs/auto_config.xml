@@ -1,8 +1,8 @@
 <Configuration>
     <Auto>
-        <name>FeBulk</name>
+        <name>bulk_BCC</name>
         <directory>Auto/bulk_BCC</directory>
-        <md_format>cfg</md_format>
+        <md_format>poscar</md_format>
         <id_atoms>1-20,30-50</id_atoms>
         <model>MCD GMM</model>
         <MCD>
