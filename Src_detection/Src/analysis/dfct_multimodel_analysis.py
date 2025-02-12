@@ -5,7 +5,8 @@ import more_itertools
 
 from ase import Atoms, Atom
 from typing import Dict, List, Any, Tuple
-from ..metrics import MCDModel, GMMModel, PCAModel, LogisticRegressor
+from types import FunctionType
+from ..metrics import MCDModel, GMMModel, PCAModel, LogisticRegressor, MetaModel
 from ..clusters import Cluster, ClusterDislo, DislocationObject, reference_structure, NanoCluster
 from ..mld import DBManager
 from ..tools import timeit, build_extended_neigh_
@@ -32,6 +33,9 @@ class DfctMultiAnalysisObject :
                                                                     'A15':{},
                                                                     'C15':{},
                                                                     'other':{}}
+
+        self.mean_atomic_volume = None
+
 
         def fill_dictionnary_fast(ats : Atoms, dic : Dict[str,List[Atoms]]) :
             symbols = ats.get_chemical_symbols()
@@ -283,7 +287,6 @@ class DfctMultiAnalysisObject :
             Optional dictionnary of parameters for DXA (see https://www.ovito.org/docs/current/reference/pipelines/modifiers/dislocation_analysis.html)
         """
         ovito_config = ase_to_ovito(atoms)
-        #ovito_config.particles_.create_property('Structure Type',data=np.asarray(list_type))
 
         pipeline = Pipeline(source = StaticSource(data = ovito_config))
         dic_lattice = {'fcc':DislocationAnalysisModifier.Lattice.FCC,
@@ -518,7 +521,7 @@ class DfctMultiAnalysisObject :
         self.logistic_models[name_regressor] = LogisticRegressor()
         self.logistic_models[name_regressor]._fit_logistic_model(Xdata, Ytarget, species, inputs_properties)
 
-        print('Score for {:s} logistic regressor is : {:1.4f}'.format(species,self.logistic_model.models[species]['logistic_regressor'].score(Xdata,Ytarget)))
+        print('Score for {:s} logistic regressor is : {:1.4f}'.format(species,self.logistic_models[species]['logistic_regressor'].score(Xdata,Ytarget)))
         return 
 
     def one_the_fly_logistic_analysis(self, atoms : Atoms) -> Atoms :
@@ -580,7 +583,11 @@ class DfctMultiAnalysisObject :
 ###############################################################
 ### UPDATING POINT DEFECT CLUSTERS PART 
 ###############################################################
-    def update_dfct(self, key_nano : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0, elliptic : str = 'iso') -> None :
+    def update_dfct(self, key_nano : str, 
+                    atom : Atom, 
+                    array_property : Dict[str,Any] = {}, 
+                    rcut : float = 4.0, 
+                    elliptic : str = 'iso') -> None :
         """Method to update defect inside dictionnary
         
         Parameters
@@ -612,7 +619,10 @@ class DfctMultiAnalysisObject :
                 next_index = max([int(key) for key in self.dfct[key_nano].keys()]) + 1
                 self.dfct[key_nano][next_index] = Cluster(atom, rcut, array_property=array_property) 
 
-    def update_nanophase(self, key_dfct : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0) -> None :
+    def update_nanophase(self, key_dfct : str, 
+                         atom : Atom, 
+                         array_property : Dict[str,Any] = {}, 
+                         rcut : float = 4.0) -> None :
         """Method to update defect inside dictionnary
         
         Parameters
@@ -716,176 +726,11 @@ class DfctMultiAnalysisObject :
         return 
 
 
-
-###############################################################
-### GLOBAL ANALYSIS PART 
-###############################################################
-    def NanophasesAnalysis(self, atoms : Atoms,
-                           kind_phases : List[str], 
-                           threshold_p : np.ndarray = None) -> None : 
-        """Brut force analysis to localised nanophases in ```Atoms``` system
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object to analyse 
-
-        kind_phases : List[str]
-            List of phase to test in analysis
-
-        threshold_p : np.ndarray 
-            Threshold probabilities array to classift nanophases
-        """
-
-        #sanity check 
-        for phase in kind_phases : 
-            if phase not in self.dfct.keys() : 
-                raise NotImplementedError(f'... Looking for not implemented nanophase : {phase} ...')
-
-        atomic_volume = atoms.get_array('atomic-volume').flatten()
-        mean_atomic_volume = np.mean(atomic_volume)
-        self.mean_atomic_volume = mean_atomic_volume        
-
-        for phases in kind_phases : 
-            probability = atoms.get_array(f'probability-{phases}')
-            distance = atoms.get_array(f'mcd-distances-{phases}')
-            mask = (atomic_volume < mean_atomic_volume) & probability > threshold_p
-            idx2do = np.where(mask)[0]
-
-            for id_atom in idx2do :  
-                atom = atoms[id_atom]
-                self.update_nanophase(phases, atom, array_property={'atomic-volume':[atomic_volume[id_atom]],
-                                                                    f'mcd-distance-{phases}':[distance[id_atom]]}, rcut=4.0)
-
-        return 
-
-    def VacancyAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
-        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object to analyse 
-
-        mcd_treshold : float
-            Ratio mcd/max(mcd) to consider the presence of atomic defect
-
-        """
-        atomic_volume = atoms.get_array('atomic-volume').flatten()
-        mcd_distance = atoms.get_array('mcd-distance').flatten()
-        
-        max_mcd = np.amax(mcd_distance)
-        mean_atomic_volume = np.mean(atomic_volume)
-        self.mean_atomic_volume = mean_atomic_volume
-
-        # build the mask
-        mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume > mean_atomic_volume)
-        idx2do = np.where(mask)[0]
-
-        for id_atom in idx2do :  
-            atom = atoms[id_atom]
-            self.update_dfct('vacancy', atom, array_property={'atomic-volume':[atomic_volume[id_atom]]}, rcut=4.0, elliptic = elliptic)
-
-        return
-
-    def InterstialAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
-        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object to analyse 
-
-        mcd_treshold : float
-            Ratio mcd/max(mcd) to consider the presence of atomic defect
-
-        """
-        atomic_volume = atoms.get_array('atomic-volume').flatten()
-        mcd_distance = atoms.get_array('mcd-distance').flatten()
-        
-        max_mcd = np.amax(mcd_distance)
-        mean_atomic_volume = np.mean(atomic_volume)
-        self.mean_atomic_volume = mean_atomic_volume
-
-        # build the mask
-        mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume < mean_atomic_volume)
-        idx2do = np.where(mask)[0]
-
-        for id_atom in idx2do :  
-            atom = atoms[id_atom]
-            self.update_dfct('interstial', atom, array_property={'atomic-volume':[atomic_volume[id_atom]]}, rcut=4.0, elliptic = elliptic)
-
-        return     
-        
-    def DislocationAnalysis(self, atoms : Atoms, mcd_threshold : float,
-                            rcut_extended : float = 4.0,
-                            rcut_full : float = 5.0,
-                            rcut_neigh : float = 5.0,
-                            reference_structure : reference_structure = None,
-                            params_dislocation : Dict[str,float | np.ndarray] = {}) -> None : 
-        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object to analyse 
-
-        mcd_treshold : float
-            Ratio mcd/max(mcd) to consider the presence of atomic defect
-
-        """
-        
-        if rcut_extended > rcut_full : 
-            raise ValueError(f'First buffer region is larger than second buffer region ! ({rcut_extended} > {rcut_full})')
-
-        atomic_volume = atoms.get_array('atomic-volume').flatten()
-        mcd_distance = atoms.get_array('mcd-distance').flatten()
-        
-        max_mcd = np.amax(mcd_distance)
-        mean_atomic_volume = np.mean(atomic_volume)
-        self.mean_atomic_volume = mean_atomic_volume
-
-        # build the mask
-        mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume < mean_atomic_volume)
-        idx2do = np.where(mask)[0]
-
-        dislo_system, extended_system, full_system = build_extended_neigh_(atoms, idx2do, rcut_extended, rcut_full)
-
-        if reference_structure is None :
-            reference_structure = self.StructureEstimator(atoms, rcut = 5.0, nb_bin = 200)
-
-        dislocation_obj = DislocationObject(dislo_system,
-                                            extended_system,
-                                            full_system,
-                                            rcut_neigh,
-                                            reference_structure = reference_structure)
-
-        if len(params_dislocation) == 0 : 
-            params_dislocation = {'rcut_line' : 3.5, 
-                                  'rcut_burger' : 4.5, 
-                                  'rcut_cluster' : 5.0,
-                                  'scale_cluster' : 1.2,
-                                  'descriptor' : None, 
-                                  'smoothing_line' : {'nb_averaging_window':3}}
-        
-        if params_dislocation['descriptor'] is not None : 
-            params_dislocation['descriptor'] = atoms.get_array('milady-descriptor')[idx2do]
-
-        dislocation_obj.BuildDislocations(params_dislocation['rcut_line'],
-                                         params_dislocation['rcut_burger'],
-                                         params_dislocation['rcut_cluster'],
-                                         params_dislocation['scale_cluster'],
-                                         params_dislocation['descriptor'],
-                                         params_dislocation['smoothing_line'])
-
-        return
-
+########################
+#### DEFECT ANALYSIS
+########################
     def PointDefectAnalysisFunction(self, atoms : Atoms,
-                           selection_funct, 
+                           selection_funct : FunctionType, 
                            function_dictionnary : Dict[str,Any],
                            kind : str = 'vacancy',
                            elliptic : str = 'iso') -> None : 
@@ -922,7 +767,13 @@ class DfctMultiAnalysisObject :
                                'interstitial': lambda a, array, rcut, elliptic: self.update_dfct('interstitial',a,
                                                                                             array_property=array, 
                                                                                             rcut=rcut,
-                                                                                            elliptic=elliptic),    
+                                                                                            elliptic=elliptic),
+                               
+                               'other': lambda a, array, rcut, elliptic: self.update_dfct('other',a,
+                                                                                            array_property=array, 
+                                                                                            rcut=rcut,
+                                                                                            elliptic=elliptic),                                                                                           
+
                                'C15': lambda a, array, rcut, e : self.update_nanophase('C15',a,
                                                                                     array_property=array,
                                                                                     rcut=rcut),
@@ -940,6 +791,63 @@ class DfctMultiAnalysisObject :
             dictionnary_methods[kind](atom, array_properties, 4.0, elliptic)
 
         return 
+
+    def DislocationAnalysisFunction(self, atoms : Atoms,
+                            selection_function : FunctionType,
+                            function_dictionnary : Dict[str,Any],
+                            rcut_extended : float = 4.0,
+                            rcut_full : float = 5.0,
+                            rcut_neigh : float = 5.0,
+                            reference_structure : reference_structure = None,
+                            params_dislocation : Dict[str,float | np.ndarray] = {}) -> None : 
+        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
+        
+        Parameters
+        ----------
+
+        atoms : Atoms 
+            Atoms object to analyse 
+
+        mcd_treshold : float
+            Ratio mcd/max(mcd) to consider the presence of atomic defect
+
+        """
+        
+        if rcut_extended > rcut_full : 
+            raise ValueError(f'First buffer region is larger than second buffer region ! ({rcut_extended} > {rcut_full})')
+
+        
+        selected_idx = selection_function(atoms,function_dictionnary)
+        dislo_system, extended_system, full_system = build_extended_neigh_(atoms, selected_idx, rcut_extended, rcut_full)
+
+        if reference_structure is None :
+            reference_structure = self.StructureEstimator(atoms, rcut = 5.0, nb_bin = 200)
+
+        dislocation_obj = DislocationObject(dislo_system,
+                                            extended_system,
+                                            full_system,
+                                            rcut_neigh,
+                                            reference_structure = reference_structure)
+
+        if len(params_dislocation) == 0 : 
+            params_dislocation = {'rcut_line' : 3.5, 
+                                  'rcut_burger' : 4.5, 
+                                  'rcut_cluster' : 5.0,
+                                  'scale_cluster' : 1.2,
+                                  'descriptor' : None, 
+                                  'smoothing_line' : {'nb_averaging_window':3}}
+        
+        if params_dislocation['descriptor'] is not None : 
+            params_dislocation['descriptor'] = atoms.get_array('milady-descriptor')[selected_idx]
+
+        dislocation_obj.BuildDislocations(params_dislocation['rcut_line'],
+                                         params_dislocation['rcut_burger'],
+                                         params_dislocation['rcut_cluster'],
+                                         params_dislocation['scale_cluster'],
+                                         params_dislocation['descriptor'],
+                                         params_dislocation['smoothing_line'])
+
+        return
 
 ###########################################
 #### WRITING PART 

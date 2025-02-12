@@ -4,209 +4,20 @@ import os, sys, shutil
 import xml.etree.ElementTree as ET
 import numpy as np
 import pathlib 
-from typing import Union,Any,List
+from typing import Union,Any,List, Dict, Tuple
 ScriptArg = Union[int,float,str]
 
 
-class BaseParser:
-    def __init__(self,
-                xml_path:None|os.PathLike[str]=None) -> None:
-        """Base reader of MAB XML configuration file
-        
-        Parameters
-        ----------
-        xml_path : os.PathLike[str]
-            path to XML file, default None
-        
-        """
-        self.parameters = {}
-        #self.set_default_parameters()
-        self.xml_path = xml_path
-    
-        if not xml_path is None:    
-            assert os.path.exists(xml_path)
-            xml_tree = ET.parse(xml_path)
-            for branch in xml_tree.getroot():
-                if branch.tag=="Directory":
-                    self.read_parameters(branch)
-                else:
-                    raise IOError("Error in XML file!")
-        else:
-            raise TimeoutError('No xml file for Unseen Token...')
-
-    
-    def set_default_parameters(self, name : str) -> None:
-        """Set default values for <Parameters> data
-        read_parameters() will *only* overwrite these values
-        """
-
-        tmp_dictionnary = {}
-
-        tmp_dictionnary['Mode'] = 'Auto'
-
-        # data
-        tmp_dictionnary["PathData"] = ['Somewhere'] 
-        tmp_dictionnary["SelectionMask"] = []
-        
-        # meta data
-        tmp_dictionnary['Name'] = 'default_data'
-        tmp_dictionnary['StatisticalDistance'] = 'MCD'
-
-        # mcd settings
-        tmp_dictionnary['contamination'] = 0.05
-        tmp_dictionnary['nb_selected'] = 10000
-        tmp_dictionnary['nb_bin'] = 100
-
-        # gmm 
-        tmp_dictionnary['dic_gaussian'] = {'n_components':2,
-                                             'covariance_type':'full',
-                                             'init_params':'kmeans'}
-
-        self.parameters[name] = tmp_dictionnary
-        return
-
-    def read_parameters(self,xml_parameters:ET.Element) -> None:
-        """Read in simulation parameters defined in the XML file 
-
-        Parameters
-        ----------
-        xml_parameters : xml.etree.ElementTreeElement
-            The <Parameters> branch of the configuration file,
-            represented as an ElementTree Element
-        
-        """
-        def boolean_converter(str_xml : str) -> bool :
-            """Convert string chain into boolean 
-
-            Parameters 
-            ----------
-            str_xml : str
-                string to convert 
-            Returns 
-            -------
-
-            bool
-            """
-            if str_xml in ['true' ,'True', '.TRUE.','.True.', 'Yes'] : 
-                return True
-            if str_xml in ['false', 'False', '.FALSE.', '.False.' ,'No'] :
-                return False
-
-        for var in xml_parameters:
-            tag = var.tag.strip()
-            if not tag in self.parameters:
-                print(f"Undefined parameter {tag}!!, skipping")
-                continue
-            else:
-                o = self.parameters[tag]
-                n = var.text
-                if isinstance(o,bool):
-                    self.parameters[tag] = boolean_converter(n)
-                elif isinstance(o,int):
-                    self.parameters[tag] = int(n)
-                elif isinstance(o,float):
-                    self.parameters[tag] = float(n)
-                elif isinstance(o,str):
-                    self.parameters[tag] = n
-                elif isinstance(o,list):
-                    self.parameters[tag] = [float(dat) for dat in n.split()]
-                elif isinstance(o,dict):
-                    for child in var : 
-                        tag_child = child.tag
-                        co = self.parameters[tag][tag_child]
-                        cn = child.text
-                        if isinstance(co,int) :
-                            self.parameters[tag][tag_child] = int(cn)
-                        elif isinstance(co,float) :
-                            self.parameters[tag][tag_child] = float(cn)
-                        elif isinstance(co,str) :
-                            self.parameters[tag][tag_child] = cn            
-                        elif isinstance(co,bool) : 
-                            self.parameters[tag][tag_child] = boolean_converter(cn)
-
-
-    def read_scripts(self,xml_scripts : ET.Element) -> None:
-        """Read in scripts defined in the XML file 
-
-        Parameters
-        ----------
-        xml_parameters : xml.etree.ElementTreeElement
-            The <Scripts> branch of the configuration file,
-            represented as an ElementTree Element
-        
-        """
-        for script in xml_scripts:
-            if not script.text is None:
-                tag = script.tag.strip()
-                if not tag in self.scripts:
-                    print(f"adding script {tag}")
-                self.scripts[tag] = script.text.strip()
-                
-        
-    def replace(self,field:str,key:str,value: ScriptArg) -> str:
-        """Wrapper around string replace()
-           
-        Parameters
-        ----------
-        field : str
-            string to be searched
-        key : str
-            will search for %key%
-        value : ScriptArg
-            replacement value
-        Returns
-        -------
-        str
-            the string with replaced values
-        """
-        return field.replace("%"+key+"%",str(value))
-    
-    def parse_script(self,script_key:str,
-                     arguments:None|dict=None) -> str:
-        """Parse an input script
-            If script_key is not a key of self.scripts, it 
-            it is treated as a script itself
-
-        Parameters
-        ----------
-        script_key : str
-            key for <Script> in XML file
-        args : None | dict, optional
-            Dictionary of key,value pairs for replace(), by default None
-
-        Returns
-        -------
-        str
-            The script with any keywords replaced
-        """
-        if not script_key in self.scripts:
-            script = script_key
-        else:
-            script = self.scripts[script_key]
-        if arguments is None:
-            _args = {}
-        else:
-            _args = arguments.copy()
-        _args["Configuration"] = self.Configuration
-        _args["DELTAT"] = self.parameters['DeltaTau']
-        if not self.PotentialLocation is None:
-            _args["Potential"] = self.PotentialLocation
-        if not self.Species is None:
-            _args["Species"] = " ".join(self.Species)
-        for key,value in _args.items():
-            script = self.replace(script,key,value)
-        return script
-    
-    
-    
 class UNSEENConfigParser: 
-    def __init__(self, xml_path: str):
+    def __init__(self, xml_path: os.PathLike[str]):
         self.xml_path = xml_path
+        self.path_metamodel_pkl : os.PathLike[str] = None
         self.auto_config: Dict[str, Any] = {}
         self.custom_config: List[Dict[str, Any]] = []
         self.inference_config: Dict[str, Any] = {}
         
         if os.path.exists(xml_path):
+            print(xml_path)
             self.tree = ET.parse(xml_path)
             self.root = self.tree.getroot()
             self.parse()
@@ -223,6 +34,7 @@ class UNSEENConfigParser:
             'md_format': 'cfg',
             'id_atoms': 'all',
             'models': {'MCD': True, 'GMM': False, 'MAHA': False},
+            'species':'Fe',
             'MCD': {'nb_bin_histo': 100, 'nb_selected': 10000, 'contamination': 0.05},
             'GMM': {
                 'nb_bin_histo': 100,
@@ -237,17 +49,24 @@ class UNSEENConfigParser:
         }
         self.custom_config = []  
         self.inference_config = {}    
-          
+        self.path_metamodel_pkl = os.getcwd()
 
     def parse(self) -> None:
         """Main parsing method to process Auto and Custom tags"""
         for child in self.root:
-            if child.tag == 'Auto':
+        
+            if child.tag == 'PickleMetaModel': 
+                self.set_metamodel_path(child)
+            elif child.tag == 'Auto':
                 self.parse_auto(child)
             elif child.tag == 'Custom':
                 self.parse_custom(child)
             elif child.tag == 'Inference':
                 self.parse_inference(child)
+
+    def set_metamodel_path(self, element : ET.Element) -> None :
+        self.path_metamodel_pkl = element.findtext('path', default=os.getcwd()).strip()
+        return 
 
     def parse_auto(self, element: ET.Element) -> None:
         """Parse <Auto> configuration"""
@@ -267,9 +86,9 @@ class UNSEENConfigParser:
         #debug_cos print('DIRECTORIESSSSSSSS  ', self.auto_config['directory'], self.auto_config['directory_path'], self.auto_config['directory_name'])
         
         auto_pickle_file = f"{self.auto_config.get('name', 'ref')}_ref_data.pickle"
-        auto_pickle_model = f"{self.auto_config.get('name', 'ref')}_ref_model.pickle"
+        #auto_pickle_model = f"{self.auto_config.get('name', 'ref')}_ref_model.pickle"
         self.auto_config['pickle_data'] = auto_pickle_file   
-        self.auto_config['pickle_model'] = auto_pickle_model
+        #self.auto_config['pickle_model'] = auto_pickle_model
 
         
         
@@ -286,6 +105,9 @@ class UNSEENConfigParser:
              print(f"Error: The path '{directory_path}' exists but is not a directory.")
              sys.exit(1) 
 
+        
+        # species option
+        self.auto_config['species'] = element.findtext('species', default='Fe').strip().split()           
         
         self.auto_config['md_format'] = element.findtext('md_format', default='cfg').strip()            
         allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
@@ -319,8 +141,12 @@ class UNSEENConfigParser:
         self.auto_config['GMM'] = self.parse_gmm(element.find('GMM'))
         self.auto_config['MAHA'] = self.parse_maha(element.find('MAHA'))
 
+        # Add metamodel path 
+        self.auto_config['path_metamodel_pkl'] = self.path_metamodel_pkl
+
     def parse_custom(self, element: ET.Element) -> None:
         """Parse <Custom> configuration containing multiple <Reference> entries"""
+
         for ref_elem in element.findall('Reference'):
             ref: Dict[str, Any] = {}
             ref['name'] = ref_elem.findtext('name', default='ref_01').strip()
@@ -339,9 +165,9 @@ class UNSEENConfigParser:
             #debug_cos print('DIRECTORIESSSSSSSS  ', ref['directory'], ref['directory_path'], ref['directory_name'])
             
             ref_pickle_file = f"{ref.get('name', 'ref')}_ref_data.pickle"
-            ref_pickle_model = f"{ref.get('name', 'ref')}_ref_model.pickle"
+            #ref_pickle_model = f"{ref.get('name', 'ref')}_ref_model.pickle"
             ref['pickle_data'] = ref_pickle_file   
-            ref['pickle_model'] = ref_pickle_model
+            #ref['pickle_model'] = ref_pickle_model
             
             
             directory_path = pathlib.Path(ref['directory'])
@@ -357,6 +183,10 @@ class UNSEENConfigParser:
              sys.exit(1) 
             ref['md_format'] = ref_elem.findtext('md_format', default='cfg').strip()
             
+            # species
+            ref['species'] = element.findtext('species', default='Fe').strip().split()            
+        
+
             allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
             md_format = ref_elem.findtext('md_format', default='cfg').strip()
             if md_format not in allowed_formats:
@@ -364,9 +194,11 @@ class UNSEENConfigParser:
                 print(f"Allowed formats are: {', '.join(sorted(allowed_formats))}")
                 sys.exit(1) 
             
-            
-            ref['id_atoms'] = self.parse_id_atoms(ref_elem.findtext('id_atoms', default='all'))
-            
+            try : 
+                ref['id_atoms'] = self.parse_id_atoms(ref_elem.findtext('id_atoms', default='all'))
+            except : 
+                ref['selection_mask'] = self.parse_slice_atoms(ref_elem.findtext('selection_mask',default='[:]'))
+
             model_text = ref_elem.findtext('model', default='MCD').strip()
             models = model_text.split()
             allowed_models = {'MCD', 'GMM', 'MAHA'}
@@ -387,16 +219,31 @@ class UNSEENConfigParser:
             ref['GMM'] = self.parse_gmm(ref_elem.find('GMM'))
             ref['MAHA'] = self.parse_maha(ref_elem.find('MAHA'))
             
+            # Add metamodel path 
+            ref['path_metamodel_pkl'] = self.path_metamodel_pkl
+
             self.custom_config.append(ref)
 
     def parse_inference(self, element: ET.Element) -> None:
         """Parse <Inference> configuration"""
-        self.inference_config = {
-            'name': element.findtext('name', default='inference').strip(),
-            'directory': element.findtext('directory', default='./Inference').strip(),
-            'md_format': element.findtext('md_format', default='cfg').strip(),
-            'id_atoms': self.parse_id_atoms(element.findtext('id_atoms', default='all'))
-        }
+        try : 
+            self.inference_config = {
+                'name': element.findtext('name', default='inference').strip(),
+                'directory': element.findtext('directory', default='./Inference').strip(),
+                'storage_pickle': element.findtext('storage_pickle', default='./inference.pkl').strip(),
+                'species': element.findtext('species', default='Fe').strip().split(),
+                'md_format': element.findtext('md_format', default='cfg').strip(),
+                'id_atoms': self.parse_id_atoms(element.findtext('id_atoms', default='all'))
+            }
+        except : 
+            self.inference_config = {
+                'name': element.findtext('name', default='inference').strip(),
+                'directory': element.findtext('directory', default='./Inference').strip(),
+                'storage_pickle': element.findtext('storage_pickle', default='./inference.pkl').strip(),
+                'species': element.findtext('species', default='Fe').strip().split(),
+                'md_format': element.findtext('md_format', default='cfg').strip(),
+                'selection_mask': self.parse_slice_atoms(element.findtext('selection_mask',default='[:]'))
+            }  
 
         # Validate MD format
         allowed_formats = {'cfg', 'poscar', 'data', 'xyz', 'dump', 'mixed', 'unseen'}
@@ -420,11 +267,16 @@ class UNSEENConfigParser:
             sys.exit(1)
             
         ref_pickle_file = f"{self.inference_config.get('name', 'infer')}_inf_data.pickle"
-        ref_pickle_model = f"{self.inference_config.get('name', 'infer')}_inf_model.pickle"
+        #ref_pickle_model = f"{self.inference_config.get('name', 'infer')}_inf_model.pickle"
         self.inference_config['pickle_data'] = ref_pickle_file   
-        self.inference_config['pickle_model'] = ref_pickle_model
-    
+        #self.inference_config['pickle_model'] = ref_pickle_model
+        self.inference_config['path_metamodel_pkl'] = self.path_metamodel_pkl
 
+    def parse_slice_atoms(self, text_slice : str) -> Tuple[slice] : 
+        """Parse numpy array slice to select id_atoms"""
+        return tuple((slice(*(int(i) if i else None for i in part.strip().split(':'))) 
+                      if ':' in part else int(part.strip())) 
+                      for part in text_slice.strip('[]').split(','))
 
     def parse_id_atoms(self, id_text: str) -> List[int] | str:
         """Parse id_atoms string into list of integers or 'all'"""
@@ -487,6 +339,7 @@ class UNSEENConfigParser:
         
         gmm = defaults.copy()
         for child in opts:
+            print('child gmm')
             tag = child.tag
             if tag in ['nb_bin_histo', 'nb_selected']:
                 gmm[tag] = int(child.text)
