@@ -1,12 +1,13 @@
 import numpy as np
 import os
 import matplotlib.pyplot as plt
-import more_itertools
 
 from ase import Atoms, Atom
+from ase.io import write
 from typing import Dict, List, Any, Tuple
-from ..metrics import MCDModel, GMMModel, PCAModel, LogisticRegressor
-from ..clusters import Cluster, ClusterDislo, NanoCluster, DislocationObject, reference_structure
+from types import FunctionType
+from ..metrics import PCAModel, LogisticRegressor, MetaModel
+from ..clusters import Cluster, ClusterDislo, DislocationObject, reference_structure, NanoCluster
 from ..mld import DBManager
 from ..tools import timeit, build_extended_neigh_
 
@@ -15,19 +16,24 @@ from ovito.modifiers import VoronoiAnalysisModifier, DislocationAnalysisModifier
 from ovito.pipeline import StaticSource, Pipeline
 
 #######################################################
-## Dfct analysis object
+## GENERAL DEFECT ANALYSIS OBJECT
 #######################################################
-class DfctAnalysisObject : 
+class DfctMultiAnalysisObject : 
     """TODO write doc"""
-    def __init__(self, dbmodel : DBManager, extended_properties : List[str] = None, **kwargs) -> None : 
+    def __init__(self, dbmodel : DBManager = None, extended_properties : List[str] = None, **kwargs) -> None : 
         self.dic_class : Dict[str,Dict[str,List[Atoms]]] = {}
-        self.mcd_model = MCDModel()
-        self.gmm_model = GMMModel()
-        self.pca_model = PCAModel()
-        self.logistic_model = LogisticRegressor() 
+        self.metamodel : MetaModel = MetaModel()
+        self.pca_models : Dict[str,PCAModel] = {}
+        self.logistic_models : Dict[str,LogisticRegressor] = {} 
 
-        self.dfct : Dict[str, Dict[int, Cluster | ClusterDislo]] = {'vacancy':{},'interstial':{},'dislocation':{},'other':{}}
-        self.mean_atomic_volume = None 
+        self.dfct : Dict[str, Dict[int, Cluster | ClusterDislo]] = {'vacancy':{},
+                                                                    'interstial':{},
+                                                                    'dislocation':{},
+                                                                    'A15':{},
+                                                                    'C15':{},
+                                                                    'other':{}}
+
+        self.mean_atomic_volume : Dict[str, float] = {}
 
         def fill_dictionnary_fast(ats : Atoms, dic : Dict[str,List[Atoms]]) :
             symbols = ats.get_chemical_symbols()
@@ -43,40 +49,74 @@ class DfctAnalysisObject :
             if prop not in implemented_properies :
                 raise NotImplementedError('{} : this property is not yet implemented'.format(prop))
 
-        for key in dbmodel.model_init_dic.keys() : 
-            key_dic = key[0:6]
-            if key_dic in self.dic_class.keys() : 
-                #voronoi analysis
-                if 'atomic-volume' or 'coordination' in extended_properties : 
-                    dbmodel.model_init_dic[key]['atoms'] = self.compute_Voronoi(dbmodel.model_init_dic[key]['atoms'])
+        if dbmodel is not None : 
+            for key in dbmodel.model_init_dic.keys() : 
+                key_dic = key[0:6]
+                if key_dic in self.dic_class.keys() : 
+                    #voronoi analysis
+                    if 'atomic-volume' or 'coordination' in extended_properties : 
+                        dbmodel.model_init_dic[key]['atoms'] = self.compute_Voronoi(dbmodel.model_init_dic[key]['atoms'])
 
-                if 'label-dfct' in extended_properties : 
-                    dic_nb_dfct = kwargs['dic_nb_dfct']
-                    dbmodel.model_init_dic[key]['atoms'] = self._labeling_outlier_atoms(dbmodel.model_init_dic[key]['atoms'],dic_nb_dfct)
+                    if 'label-dfct' in extended_properties : 
+                        dic_nb_dfct = kwargs['dic_nb_dfct']
+                        dbmodel.model_init_dic[key]['atoms'] = self._labeling_outlier_atoms(dbmodel.model_init_dic[key]['atoms'],dic_nb_dfct)
 
-                #descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
-                #[ fill_dictionnary(key, at, id_at, descriptors, extended_properties, self.dic_class[key[0:6]]) \
-                # for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
-                fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'], self.dic_class[key_dic])
+                    fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'], self.dic_class[key_dic])
 
-            else : 
-                # voronoi analysis
-                if 'atomic-volume' or 'coordination' in extended_properties : 
-                    dbmodel.model_init_dic[key]['atoms'] = self.compute_Voronoi(dbmodel.model_init_dic[key]['atoms'])
-                
-                if 'label-dfct' in extended_properties : 
-                    dic_nb_dfct = kwargs['dic_nb_dfct']
-                    dbmodel.model_init_dic[key]['atoms'] = self._labeling_outlier_atoms(dbmodel.model_init_dic[key]['atoms'],dic_nb_dfct)             
+                else : 
+                    # voronoi analysis
+                    if 'atomic-volume' or 'coordination' in extended_properties : 
+                        dbmodel.model_init_dic[key]['atoms'] = self.compute_Voronoi(dbmodel.model_init_dic[key]['atoms'])
 
-                species = dbmodel.model_init_dic[key]['atoms'].symbols.species()
-                dic_species : Dict[str,List[Atoms]] = {sp:[] for sp in species}
-                #descriptors = dbmodel.model_init_dic[key]['atoms'].get_array('milady-descriptors')
-                #[ fill_dictionnary(key, at, id_at, descriptors, extended_properties, dic_species) \
-                # for id_at, at in enumerate(dbmodel.model_init_dic[key]['atoms']) ]
+                    if 'label-dfct' in extended_properties : 
+                        dic_nb_dfct = kwargs['dic_nb_dfct']
+                        dbmodel.model_init_dic[key]['atoms'] = self._labeling_outlier_atoms(dbmodel.model_init_dic[key]['atoms'],dic_nb_dfct)             
 
-                fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'], dic_species)
-                self.dic_class[key_dic] = dic_species
+                    species = dbmodel.model_init_dic[key]['atoms'].symbols.species()
+                    dic_species : Dict[str,List[Atoms]] = {sp:[] for sp in species}
+
+                    fill_dictionnary_fast(dbmodel.model_init_dic[key]['atoms'], dic_species)
+                    self.dic_class[key_dic] = dic_species
         return
+
+    def DraftData(self, 
+                  db_model : DBManager, 
+                  extended_properties : List[str] = None,
+                  extension : str = 'cfg') -> None : 
+        """Write draftly data coming from distance analysis
+        
+        Parameters
+        ----------
+
+        db_model : ```DBManager``` 
+            ```DBManager``` object to write 
+        
+        extended_properties : List[str] 
+            List of extended properties to consider for analysis
+
+        extension : str
+            Type of extension for geometry files
+        """
+        
+        # seem to be useless for cfg ...
+        list_whole_properties = []
+        dic_equiv = {'MCD':'mcd-distance',
+                     'GMM':'gmm-distance',
+                     'MAHA':'mahalanobis-distance'}
+        for key_m in self.metamodel.meta_data.keys() : 
+            kind = dic_equiv[self.metamodel.meta_kind[key_m]]
+            name = self.metamodel.meta_data[key_m]
+            list_whole_properties.append(f'{kind}-{name}')
+        list_whole_properties += extended_properties
+
+        print(list_whole_properties)
+
+        for key, val in db_model.model_init_dic.items() : 
+            write(f'{key}.{extension}', 
+                  val['atoms'], 
+                  format=extension)
+
+        return 
 
     def compute_Voronoi(self, atoms : Atoms) -> Atoms : 
         """Compute atomic volume and coordination based on Ovito Voronoi analysis
@@ -163,7 +203,10 @@ class DfctAnalysisObject :
 
         return {'structure':structure, 'unit_cell':dictionnary_equivalent[structure](maximum_r)}
 
-    def VoronoiDistribution(self, atoms : Atoms, species : str, nb_bin : int = 20) -> Tuple[float, float] :
+    def VoronoiDistribution(self, atoms : Atoms, 
+                            name_distribution : str,
+                            species : str, 
+                            nb_bin : int = 20) -> Tuple[float, float] :
         """Plot atomic volume distribution for a given system 
         
         Parameters
@@ -188,7 +231,9 @@ class DfctAnalysisObject :
             std of Voronoi volume of the system
 
         """
-        atomic_volume = atoms.get_array('atomic-volume')
+        
+        atoms_sp = self._get_all_atoms_species_list([atoms], species)[0]
+        atomic_volume = atoms_sp.get_array('atomic-volume')
         plt.figure()
         n, _, patches = plt.hist(atomic_volume,density=True,bins=nb_bin,alpha=0.7)
         for i in range(len(patches)):
@@ -203,71 +248,11 @@ class DfctAnalysisObject :
         plt.ylabel(r'Probability density')
         plt.yscale('log')
         plt.tight_layout()
-        plt.savefig('atomic_vol.pdf', dpi=300)
+        plt.savefig(f'atomic_vol_{name_distribution}_{species}.png', dpi=300)
 
-        return np.mean(atomic_volume), np.std(atomic_volume)
+        self.mean_atomic_volume[species] = np.mean(atomic_volume)
 
-    def MCDDistribution(self, atoms : Atoms, species : str, nb_bin : int = 20, threshold : float = 0.05) -> float : 
-        """Perform MCD analysis for a given species
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms system to analyse
-
-        species : str 
-            Species of the Atoms system
-
-        nb_bin : int 
-            Number of bin for histogram
-
-        threshold : float 
-            Percentage of mcd distance used as threshold
-
-        Returns:
-        --------
-
-        float 
-            Bound for mcd distance
-        """
-
-        #mcd distribution 
-        fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14,6))
-        list_mcd = atoms.get_array('mcd-distance').flatten()
-        n, _, patches = axis[0].hist(list_mcd,density=True,bins=nb_bin,alpha=0.7)
-        for i in range(len(patches)):
-            patches[i].set_facecolor(plt.cm.viridis(n[i]/max(n)))
-
-        axis[0].axvline(threshold*np.amax(list_mcd),min(n),max(10*n),
-                   color='black',
-                   linewidth=1.0,
-                   zorder=10)
-        axis[0].set_xlabel(r'MCD distance $d_{\textrm{MCD}}$ for %s atoms'%(species))
-        axis[0].set_ylabel(r'Probability density')
-        axis[0].set_yscale('log')
-
-        #pca ! 
-        cm = plt.cm.get_cmap('gnuplot')
-        print('')
-        print('... Starting PCA analysis for {:s} atoms ...'.format(species))
-        desc_transform = self.pca_model._get_pca_model(atoms, species, n_component=2)
-        scat = axis[1].scatter(desc_transform[:,0],desc_transform[:,1],
-                               c=list_mcd,
-                               cmap=cm,
-                               edgecolors='grey',
-                               linewidths=0.5,
-                               alpha=0.5,
-                               rasterized=True)
-        print('... PCA analysis is done ...'.format(species))
-        axis[1].set_xlabel(r'First principal component for %s atoms'%(species))
-        axis[1].set_ylabel(r'Second principal component for %s atoms'%(species))
-        cbar = fig.colorbar(scat,ax=axis[1])
-        cbar.set_label(r'MCD disctances $d_{\textrm{MCD}}$', rotation=270)
-        plt.tight_layout()
-
-        plt.savefig('{:s}_dfct_distribution_analysis.pdf'.format(species),dpi=300)
-        return threshold*np.amax(list_mcd)
+        return self.mean_atomic_volume[species], np.std(atomic_volume)
 
     def DXA_analysis(self, atoms : Atoms, lattice_type : str, param_dxa : Dict[str,Any] = {}) -> None : 
         """Perform classical DXA analysis from ```Ovito``` ...
@@ -285,7 +270,6 @@ class DfctAnalysisObject :
             Optional dictionnary of parameters for DXA (see https://www.ovito.org/docs/current/reference/pipelines/modifiers/dislocation_analysis.html)
         """
         ovito_config = ase_to_ovito(atoms)
-        #ovito_config.particles_.create_property('Structure Type',data=np.asarray(list_type))
 
         pipeline = Pipeline(source = StaticSource(data = ovito_config))
         dic_lattice = {'fcc':DislocationAnalysisModifier.Lattice.FCC,
@@ -313,30 +297,17 @@ class DfctAnalysisObject :
             print("Dislocation %i: length=%f, Burgers vector=%s" % (line.id, line.length, line.true_burgers_vector))
             print(line.points)
 
-    def setting_mcd_model(self, path_pkl : os.PathLike[str]) -> None : 
-        """Loading MCD models from a previous bulk analysis
+    def setting_metamodel(self, path_pkl : os.PathLike[str]) -> None : 
+        """Loading MetaModel from a previous analysis
         
         Parameters
         ----------
 
-        MCD_object : MCD_analysis_object 
-            Filled MCD_analysis_object from a bulk analysis
+        path_pkl : os.PathLike[str]
+            Path to the previous MetaModel 
 
         """
-        self.mcd_model = MCDModel(path_pkl)
-        return
-
-    def setting_gmm_model(self, path_pkl : os.PathLike[str]) -> None : 
-        """Loading GMM models from a previous bulk analysis
-        
-        Parameters
-        ----------
-
-        MCD_object : MCD_analysis_object 
-            Filled MCD_analysis_object from a bulk analysis
-
-        """
-        self.gmm_model = GMMModel(path_pkl)
+        self.metamodel._load_pkl(path_pkl)
         return
 
     def _get_all_atoms_species(self, species : str) -> List[Atoms] : 
@@ -363,98 +334,15 @@ class DfctAnalysisObject :
 
         return list_atoms_species
 
-    def one_the_fly_mcd_analysis(self, atoms : Atoms) -> Atoms :
-        """Build one the fly mcd distances
-        
-        Parameters
-        ----------
+    def _get_all_atoms_species_list(self, list_ats : List[Atoms], species : str) -> List[Atoms] : 
+        """Fast method to extract ```Atoms``` object with specific species from a given ```List[Atoms]``` """
+        def fast_species(ats : Atoms, species : str) -> Atoms : 
+            symbols = ats.get_chemical_symbols()
+            mask_species = list(map( lambda b : b == species, symbols))
+            return ats[mask_species]
 
-        atoms : Atoms 
-            Atoms object containing a given configuration
-        """
-
-        descriptor = atoms.get_array('milady-descriptors')
-        
-        full_species = atoms.get_chemical_symbols()
-
-        species = np.unique(full_species)
-        full_array_mcd = np.zeros(descriptor.shape[0])
-        full_array_proba = np.zeros(descriptor.shape[0])
-        for s in species : 
-            mask_s = list(map( lambda b : b == s, full_species))
-            mcd_s = self.mcd_model.models[s]['mcd'].mahalanobis(descriptor[mask_s]) 
-            proba_s = self.mcd_model.models[s]['distribution'].score(mcd_s.reshape(-1,1))
-
-            full_array_mcd[mask_s] = mcd_s
-            full_array_proba[mask_s] = proba_s
-
-        atoms.set_array('mcd-distance',
-                        np.array(full_array_mcd).reshape(len(full_array_mcd),),
-                        dtype=float)
-        atoms.set_array('probabilty',
-                        np.array(full_array_proba).reshape(len(full_array_proba),),
-                        dtype=float)    
-
-        return atoms
-
-    def one_the_fly_gmm_analysis(self, atoms : Atoms) -> Atoms :
-        """Build one the fly gmm distances
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object containing a given configuration
-        """
-
-        descriptor = atoms.get_array('milady-descriptors')
-        
-        full_species = atoms.get_chemical_symbols()
-
-        species = np.unique(full_species)
-        full_array_gmmd = np.zeros(descriptor.shape[0])
-        full_array_proba = np.zeros((self.gmm_model.n_components,descriptor.shape[0]))
-        for s in species : 
-            mask_s = list(map( lambda b : b == s, full_species))
-            gmmd_s = self.gmm_model.mahalanobis_gmm(s, descriptor[mask_s])
-            proba_s = self.gmm_model._predict_probability(gmmd_s, s)
-
-            full_array_gmmd[mask_s] = gmmd_s
-            full_array_proba[mask_s] = proba_s
-
-        atoms.set_array('gmm-distance',
-                        np.array(gmmd_s),
-                        dtype=float)
-        atoms.set_array('probability',                        
-                        np.array(full_array_proba),
-                        dtype=float)
-
-        """
-        list_gmmd = []
-        list_proba = []
-        descriptor = atoms.get_array('milady-descriptors')
-        dim_gmm = None 
-        for id_at, at in enumerate(atoms) : 
-            descriptor_at = descriptor[id_at,:].reshape(1,descriptor.shape[1])
-            #gmmd = self.mahalanobis_gmm( self.gmm[at.symbol], descriptor_at )
-            #score = self.gmm[at.symbol].score(descriptor_at)
-            gmmd = self.gmm_model.mahalanobis_gmm(at.symbol, descriptor_at)
-            score = self.gmm_model._predict_probability(gmmd, at.symbol)
-            if dim_gmm is None : 
-                dim_gmm = gmmd.shape[1]
-
-            list_gmmd += [gmmd]
-            list_proba += [score]
-
-        atoms.set_array('gmm-distance',
-                        np.array(list_gmmd).reshape(len(list_gmmd),dim_gmm),
-                        dtype=float)
-        atoms.set_array('probability',                        
-                        np.array(list_proba).reshape(len(list_proba),1),
-                        dtype=float)"""
-        return atoms
+        return [fast_species(ats, species) for ats in list_ats]
     
-    #@timeit
     def _labeling_outlier_atoms(self, atoms : Atoms, dic_nb_dfct : Dict[str,int]) -> Atoms : 
         """Make labelisation of atoms in system depending their energies
         
@@ -491,122 +379,21 @@ class DfctAnalysisObject :
 
         return atoms
 
-    def fit_logistic_regressor(self, species : str, inputs_properties : List[str] = ['mcd-distance']) -> None : 
-        """Adjust logistic regressor based on inputs_properties 
-        
-        Parameters
-        ----------
-
-        species : str
-            Species for the regressor 
-
-        inputs_properties : List[str]
-            List of properties used to adjust the logistic regressor, by default regressor is only based on mcd-distance
-
-        """
-        # sanity check !
-        implemented_properies = {'local-energy':(1,),'atomic-volume':(1,),'coordination':(1,),'mcd-distance':(1,),'gmm-distance':(1,)}
-        for prop in inputs_properties : 
-            if prop not in implemented_properies :
-                raise NotImplementedError('{} : this property is not yet implemented'.format(prop))
-
-
-        #self.logistic_model[species] = LogisticRegression()
-        list_species_atoms = self._get_all_atoms_species(species)
-
-        if 'mcd-distance' in inputs_properties :
-            list_species_atoms = self.mcd_model._get_mcd_distance(list_species_atoms, species)
-
-        if 'gmm-distance' in inputs_properties : 
-            list_species_atoms = self.gmm_model._get_gmm_distance(list_species_atoms, species)
-
-        Xdata = []
-        Ytarget = []
-        for atoms in list_species_atoms : 
-            Ytarget.append(atoms.get_array('label-dfct')[0])
-            miss_shaped_X = [ atoms.get_array(prop)[0].tolist() for prop in inputs_properties ]
-            Xdata.append(list(more_itertools.collapse(miss_shaped_X)))
-
-        Xdata = np.array(Xdata)
-        Ytarget = np.array(Ytarget)
-        self.logistic_model._fit_logistic_model(Xdata, Ytarget, species, inputs_properties)
-
-        print('Score for {:s} logistic regressor is : {:1.4f}'.format(species,self.logistic_model.models[species]['logistic_regressor'].score(Xdata,Ytarget)))
-        return 
-
-    #def _predict_logistic(self, species : str, array_desc : np.ndarray) -> np.ndarray : 
-    #    """Predict the logistic score for a given array of descriptor
-    #    
-    #    Parameters
-    #    ----------
-    #    species : str 
-    #        Species associated to the descritpor array 
-    #    array_desc : np.ndarray 
-    #        Descriptor array (M,D)
-    #    Returns:
-    #    --------
-    #    np.ndarray 
-    #        Associated logistic score probabilities array (M,N_c) where N_c is the number of logistic classes
-    #    """
-    #    return self.logistic_model[species].predict_proba(array_desc)
-
-    def one_the_fly_logistic_analysis(self, atoms : Atoms) -> Atoms :
-        """Perfrom logistic regression analysis
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object containing a given configuration
-
-        Returns:
-        --------
-
-        Atoms 
-            Updated Atoms object with new array "logistic-score" which corresponding to (N,nb_class)
-            matrix (L) where N is the number of atom in the configuration and nb_class is the number of defect class
-            then L_ij corresponding to the probability to have atom i to be part of the class j 
-        """
-
-        # setting extra arrays for atoms 
-        dic_prop = {}
-        for prop in self.logistic_model._get_metadata() :
-            try : 
-                atoms.get_array(prop) 
-            except :  
-                if prop == 'mcd-distance' : 
-                    atoms = self.one_the_fly_mcd_analysis(atoms)
-                if prop == 'atomic-volume' : 
-                    atoms= self.compute_Voronoi(atoms)
-                if prop == 'gmm-distance' : 
-                    atoms = self.one_the_fly_gmm_analysis(atoms)
-
-            dic_prop[prop] = atoms.get_array(prop)
-
-        
-        list_logistic_score = []
-        for id_at, at in enumerate(atoms) :
-            miss_shaped_data = [ dic_prop[prop][id_at].tolist() for prop in dic_prop.keys() ]
-            array_data = np.array([ list(more_itertools.collapse(miss_shaped_data)) ])
-            list_logistic_score.append( self.logistic_model._predict_logistic(at.symbol,array_data).flatten() )
-
-        atoms.set_array('logistic-score',
-                        np.array(list_logistic_score),
-                        dtype=float)
-
-        return atoms
-
 ###############################################################
 ### UPDATING POINT DEFECT CLUSTERS PART 
 ###############################################################
-    def update_dfct(self, key_dfct : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0, elliptic : str = 'iso') -> None :
+    def update_dfct(self, key_nano : str, 
+                    atom : Atom, 
+                    array_property : Dict[str,Any] = {}, 
+                    rcut : float = 4.0, 
+                    elliptic : str = 'iso') -> None :
         """Method to update defect inside dictionnary
         
         Parameters
         ----------
 
-        key_dfct : str 
-            Type of defect to update (this method manage only ```vacancy``` and ```interstitial```)
+        key_nano : str 
+            Type of nanophase to update
 
         atom : Atom
             Atom object to update in a ```Cluster``` object
@@ -617,26 +404,24 @@ class DfctAnalysisObject :
         rcut : float 
             Cut off raduis used as initial size for new ```Cluster```
 
-        elliptic : str 
-            Type of size estimation for ```Cluster```. 
-            ```iso``` : isotropic cluster 
-            ```aniso``` : elliptic cluster
-
         """
-        if self.dfct[key_dfct] == {} : 
-            self.dfct[key_dfct][0] = Cluster(atom, rcut, array_property=array_property)
+        if self.dfct[key_nano] == {} or key_nano not in self.dfct.keys() : 
+            self.dfct[key_nano][0] = Cluster(atom, rcut, array_property=array_property)
         
         else : 
-            key_closest = np.argmin([np.linalg.norm( atom.position - cluster.center) for _, cluster in self.dfct[key_dfct].items()])
-            key_closest = [key for key in self.dfct[key_dfct]][key_closest]
-            if self.dfct[key_dfct][key_closest].get_elliptic_distance(atom) < 1.5 :
-                self.dfct[key_dfct][key_closest].append(atom, array_property=array_property, elliptic = elliptic)
+            key_closest = np.argmin([np.linalg.norm( atom.position - cluster.center) for _, cluster in self.dfct[key_nano].items()])
+            key_closest = [key for key in self.dfct[key_nano]][key_closest]
+            if self.dfct[key_nano][key_closest].get_elliptic_distance(atom) < 1.5 :
+                self.dfct[key_nano][key_closest].append(atom, array_property=array_property, elliptic = elliptic)
             
             else : 
-                next_index = max([int(key) for key in self.dfct[key_dfct].keys()]) + 1
-                self.dfct[key_dfct][next_index] = Cluster(atom, rcut, array_property=array_property) 
+                next_index = max([int(key) for key in self.dfct[key_nano].keys()]) + 1
+                self.dfct[key_nano][next_index] = Cluster(atom, rcut, array_property=array_property) 
 
-    def update_nanophase(self, key_dfct : str, atom : Atom, array_property : Dict[str,Any] = {}, rcut : float = 4.0) -> None :
+    def update_nanophase(self, key_dfct : str, 
+                         atom : Atom, 
+                         array_property : Dict[str,Any] = {}, 
+                         rcut : float = 4.0) -> None :
         """Method to update defect inside dictionnary
         
         Parameters
@@ -739,135 +524,12 @@ class DfctAnalysisObject :
         
         return 
 
-###############################################################
-### GLOBAL ANALYSIS PART 
-###############################################################
-    def VacancyAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
-        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
-        
-        Parameters
-        ----------
 
-        atoms : Atoms 
-            Atoms object to analyse 
-
-        mcd_treshold : float
-            Ratio mcd/max(mcd) to consider the presence of atomic defect
-
-        """
-        atomic_volume = atoms.get_array('atomic-volume').flatten()
-        mcd_distance = atoms.get_array('mcd-distance').flatten()
-        
-        max_mcd = np.amax(mcd_distance)
-        mean_atomic_volume = np.mean(atomic_volume)
-        self.mean_atomic_volume = mean_atomic_volume
-
-        # build the mask
-        mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume > mean_atomic_volume)
-        idx2do = np.where(mask)[0]
-
-        for id_atom in idx2do :  
-            atom = atoms[id_atom]
-            self.update_dfct('vacancy', atom, array_property={'atomic-volume':[atomic_volume[id_atom]]}, rcut=4.0, elliptic = elliptic)
-
-        return
-
-    def InterstialAnalysis(self, atoms : Atoms, mcd_threshold : float, elliptic : str = 'iso') -> None : 
-        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object to analyse 
-
-        mcd_treshold : float
-            Ratio mcd/max(mcd) to consider the presence of atomic defect
-
-        """
-        atomic_volume = atoms.get_array('atomic-volume').flatten()
-        mcd_distance = atoms.get_array('mcd-distance').flatten()
-        
-        max_mcd = np.amax(mcd_distance)
-        mean_atomic_volume = np.mean(atomic_volume)
-        self.mean_atomic_volume = mean_atomic_volume
-
-        # build the mask
-        mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume < mean_atomic_volume)
-        idx2do = np.where(mask)[0]
-
-        for id_atom in idx2do :  
-            atom = atoms[id_atom]
-            self.update_dfct('interstial', atom, array_property={'atomic-volume':[atomic_volume[id_atom]]}, rcut=4.0, elliptic = elliptic)
-
-        return     
-        
-    def DislocationAnalysis(self, atoms : Atoms, mcd_threshold : float,
-                            rcut_extended : float = 4.0,
-                            rcut_full : float = 5.0,
-                            rcut_neigh : float = 5.0,
-                            reference_structure : reference_structure = None,
-                            params_dislocation : Dict[str,float | np.ndarray] = {}) -> None : 
-        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
-        
-        Parameters
-        ----------
-
-        atoms : Atoms 
-            Atoms object to analyse 
-
-        mcd_treshold : float
-            Ratio mcd/max(mcd) to consider the presence of atomic defect
-
-        """
-        
-        if rcut_extended > rcut_full : 
-            raise ValueError(f'First buffer region is larger than second buffer region ! ({rcut_extended} > {rcut_full})')
-
-        atomic_volume = atoms.get_array('atomic-volume').flatten()
-        mcd_distance = atoms.get_array('mcd-distance').flatten()
-        
-        max_mcd = np.amax(mcd_distance)
-        mean_atomic_volume = np.mean(atomic_volume)
-        self.mean_atomic_volume = mean_atomic_volume
-
-        # build the mask
-        mask = ( mcd_distance > mcd_threshold*max_mcd ) & (atomic_volume < mean_atomic_volume)
-        idx2do = np.where(mask)[0]
-
-        dislo_system, extended_system, full_system = build_extended_neigh_(atoms, idx2do, rcut_extended, rcut_full)
-
-        if reference_structure is None :
-            reference_structure = self.StructureEstimator(atoms, rcut = 5.0, nb_bin = 200)
-
-        dislocation_obj = DislocationObject(dislo_system,
-                                            extended_system,
-                                            full_system,
-                                            rcut_neigh,
-                                            reference_structure = reference_structure)
-
-        if len(params_dislocation) == 0 : 
-            params_dislocation = {'rcut_line' : 3.5, 
-                                  'rcut_burger' : 4.5, 
-                                  'rcut_cluster' : 5.0,
-                                  'scale_cluster' : 1.2,
-                                  'descriptor' : None, 
-                                  'smoothing_line' : {'nb_averaging_window':3}}
-        
-        if params_dislocation['descriptor'] is not None : 
-            params_dislocation['descriptor'] = atoms.get_array('milady-descriptor')[idx2do]
-
-        dislocation_obj.BuildDislocations(params_dislocation['rcut_line'],
-                                         params_dislocation['rcut_burger'],
-                                         params_dislocation['rcut_cluster'],
-                                         params_dislocation['scale_cluster'],
-                                         params_dislocation['descriptor'],
-                                         params_dislocation['smoothing_line'])
-
-        return
-
+########################
+#### DEFECT ANALYSIS
+########################
     def PointDefectAnalysisFunction(self, atoms : Atoms,
-                           selection_funct, 
+                           selection_funct : FunctionType, 
                            function_dictionnary : Dict[str,Any],
                            kind : str = 'vacancy',
                            elliptic : str = 'iso') -> None : 
@@ -904,7 +566,13 @@ class DfctAnalysisObject :
                                'interstitial': lambda a, array, rcut, elliptic: self.update_dfct('interstitial',a,
                                                                                             array_property=array, 
                                                                                             rcut=rcut,
-                                                                                            elliptic=elliptic),    
+                                                                                            elliptic=elliptic),
+                               
+                               'other': lambda a, array, rcut, elliptic: self.update_dfct('other',a,
+                                                                                            array_property=array, 
+                                                                                            rcut=rcut,
+                                                                                            elliptic=elliptic),                                                                                           
+
                                'C15': lambda a, array, rcut, e : self.update_nanophase('C15',a,
                                                                                     array_property=array,
                                                                                     rcut=rcut),
@@ -923,11 +591,70 @@ class DfctAnalysisObject :
 
         return 
 
+    def DislocationAnalysisFunction(self, atoms : Atoms,
+                            selection_function : FunctionType,
+                            function_dictionnary : Dict[str,Any],
+                            rcut_extended : float = 4.0,
+                            rcut_full : float = 5.0,
+                            rcut_neigh : float = 5.0,
+                            reference_structure : reference_structure = None,
+                            params_dislocation : Dict[str,float | np.ndarray] = {}) -> None : 
+        """Brut force analysis to localised vacancies (based on mcd score and atomic volume)
+        
+        Parameters
+        ----------
+
+        atoms : Atoms 
+            Atoms object to analyse 
+
+        mcd_treshold : float
+            Ratio mcd/max(mcd) to consider the presence of atomic defect
+
+        """
+        
+        if rcut_extended > rcut_full : 
+            raise ValueError(f'First buffer region is larger than second buffer region ! ({rcut_extended} > {rcut_full})')
+
+        
+        selected_idx = selection_function(atoms,function_dictionnary)
+        dislo_system, extended_system, full_system = build_extended_neigh_(atoms, selected_idx, rcut_extended, rcut_full)
+
+        if reference_structure is None :
+            reference_structure = self.StructureEstimator(atoms, rcut = 5.0, nb_bin = 200)
+
+        dislocation_obj = DislocationObject(dislo_system,
+                                            extended_system,
+                                            full_system,
+                                            rcut_neigh,
+                                            reference_structure = reference_structure)
+
+        if len(params_dislocation) == 0 : 
+            params_dislocation = {'rcut_line' : 3.5, 
+                                  'rcut_burger' : 4.5, 
+                                  'rcut_cluster' : 5.0,
+                                  'scale_cluster' : 1.2,
+                                  'descriptor' : None, 
+                                  'smoothing_line' : {'nb_averaging_window':3}}
+        
+        if params_dislocation['descriptor'] is not None : 
+            params_dislocation['descriptor'] = atoms.get_array('milady-descriptor')[selected_idx]
+
+        dislocation_obj.BuildDislocations(params_dislocation['rcut_line'],
+                                         params_dislocation['rcut_burger'],
+                                         params_dislocation['rcut_cluster'],
+                                         params_dislocation['scale_cluster'],
+                                         params_dislocation['descriptor'],
+                                         params_dislocation['smoothing_line'])
+
+        return
+
 ###########################################
 #### WRITING PART 
 ###########################################
 
-    def GetAllPointDefectData(self, path2write : os.PathLike[str] = './point_dfct.data') -> None : 
+    def GetAllPointDefectData(self,
+                              species : str,
+                              path2write : os.PathLike[str] = './point_dfct.data') -> None : 
         """Extracting data from point defect analysis...
         
         Parameters
@@ -938,20 +665,23 @@ class DfctAnalysisObject :
         """
         with open(path2write,'w') as f_data : 
             f_data.write('Here is data analysis for point defects ... \n')
-            for dfct in ['vacancy', 'interstial'] : 
+            for dfct in ['vacancy', 'interstial','C15','A15'] : 
+                if len(self.dfct[dfct]) == 0 :
+                    continue
+
                 f_data.write(f' {dfct} analysis : I found {len(self.dfct[dfct])} clusters \n')
                 print(f' {dfct} analysis : I found {len(self.dfct[dfct])} clusters \n')
                 for key_dfct in self.dfct[dfct].keys() :
                     center = self.dfct[dfct][key_dfct].center.flatten()
                     f_data.write('{:s} cluster {:s} : nb dfct {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f} \n'.format(dfct,
                                                                                                             key_dfct,
-                                                                                                            self.dfct[dfct][key_dfct].estimate_dfct_number(self.mean_atomic_volume),
+                                                                                                            self.dfct[dfct][key_dfct].estimate_dfct_number(self.mean_atomic_volume[species]),
                                                                                                             center[0],
                                                                                                             center[1],
                                                                                                             center[2]))
                     print('{:s} cluster {:s} : nb dfct {:2.1f}, positions : {:2.3f} {:2.3f} {:2.3f}'.format(dfct,
                                                                                                             key_dfct,
-                                                                                                            self.dfct[dfct][key_dfct].estimate_dfct_number(self.mean_atomic_volume),
+                                                                                                            self.dfct[dfct][key_dfct].estimate_dfct_number(self.mean_atomic_volume[species]),
                                                                                                             center[0],
                                                                                                             center[1],
                                                                                                             center[2]))

@@ -6,7 +6,7 @@ import pickle
 
 sys.path.append(os.getcwd())
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import DBManager, DBDictionnaryBuilder, \
                   Milady, Descriptor, Regressor, Optimiser, \
                   DfctAnalysisObject, \

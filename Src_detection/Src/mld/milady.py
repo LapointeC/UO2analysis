@@ -1575,7 +1575,7 @@ class ComputeDescriptor:
         self.directory = 'mld'
         
         # Commands for calling Milady and MPI.
-        self.milady_command = '/home/marinica/MLD_GitHub/mld_build_mix/bin/milady_main.exe'
+        self.milady_command = '/home/lapointe/bin/milady_main.exe'
         self.mpi_command = 'mpirun -np'
     
     @staticmethod

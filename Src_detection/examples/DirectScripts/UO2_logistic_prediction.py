@@ -5,7 +5,7 @@ sys.path.append(os.getcwd())
 
 from ase import Atoms
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import DBManager, \
                   DfctAnalysisObject, \
                   FrameOvito, LogisticModifier, LogisticRegressor

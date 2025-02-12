@@ -1,5 +1,4 @@
-from .dfct_analysis import DfctAnalysisObject
-from .dfct_multi_model_analysis import DfctMultiAnalysisObject
-from .library_mcd import NormDescriptorHistogram, MCDAnalysisObject
-from .library_mcd_multi import MetricAnalysisObject
+from .dfct_analysis import DfctMultiAnalysisObject
+from .library_mcd_multi import MetricAnalysisObject, NormDescriptorHistogram
 from .reference import ReferenceBuilder, InferenceBuilder
+from .naive_defect_analysis import one_the_fly_logistic_analysis, fit_logistic_regressor, NanophasesAnalysis, VacancyAnalysis, InterstialAnalysis, DislocationAnalysis

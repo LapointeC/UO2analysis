@@ -221,11 +221,10 @@ class MetricAnalysisObject :
         nb_selected : int is the number of selected atoms for the MCD analysis
         """
         #TODO_cos the version list do not work ... WTF! 
-        #if list_atoms is None : 
-        list_atom_species = self._get_all_atoms_species(species)
-        #else : 
-        #    list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
-
+        if list_atoms is None : 
+            list_atom_species = self._get_all_atoms_species(species)
+        else : 
+            list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
         print()
         print('... Starting histogram procedure ...')
         #debug_cos print('list_atom_species ', list_atom_species)
@@ -288,6 +287,7 @@ class MetricAnalysisObject :
         cm = plt.cm.get_cmap('gnuplot')
         print('')
         print('... Starting PCA analysis for {:s} atoms ...'.format(species))
+        
         desc_transform = self.pca_model._get_pca_model(list_atom_species, species, n_component=2)
         scat = axis[1].scatter(desc_transform[:,0],desc_transform[:,1],
                                c=list_mcd,
@@ -295,11 +295,20 @@ class MetricAnalysisObject :
                                edgecolors='grey',
                                linewidths=0.5,
                                alpha=0.5)
+        
+        # center 
+        desc_transform_center = self.add_centers_for_PCA('MCD',name_model,species).reshape(1,-1)
+        center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
+                                      c='red',
+                                      edgecolors='grey',
+                                      marker='D',
+                                      s=49)
+
         print('... PCA analysis is done ...'.format(species))
         axis[1].set_xlabel(r'First principal component for %s atoms'%(species))
         axis[1].set_ylabel(r'Second principal component for %s atoms'%(species))
         cbar = fig.colorbar(scat,ax=axis[1])
-        cbar.set_label(r'MCD disctances $d_{\textrm{MCD}}$', rotation=270)
+        cbar.set_label(r'MCD distances $d_{\textrm{MCD}}$', rotation=270)
         plt.tight_layout()
 
         plt.savefig('{:s}_{:s}_distribution_mcd.png'.format(species,name_model),dpi=300)
@@ -316,11 +325,12 @@ class MetricAnalysisObject :
         
         TODO Same write doc 
         """
+
         #TODO_cos the version list do not work ... WTF!
-        #if list_atoms is None : 
-        list_atom_species = self._get_all_atoms_species(species)
-        #else : 
-        #    list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
+        if list_atoms is None : 
+            list_atom_species = self._get_all_atoms_species(species)
+        else : 
+            list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
                  
         print()
         print('... Starting histogram procedure ...')
@@ -342,7 +352,7 @@ class MetricAnalysisObject :
                                                                    'GMM',
                                                                    species)
 
-        fig, axis = plt.subplots(nrows=1, ncols=dict_gaussian['n_components'], figsize=(14,6))
+        fig, axis = plt.subplots(nrows=1, ncols=dict_gaussian['n_components']+1, figsize=(5*(dict_gaussian['n_components']+1),6))
         
         #mcd distribution 
         list_gmm = np.concatenate([at.get_array(f'gmm-distance-{name_model}') for at in updated_atoms], axis=0)
@@ -367,10 +377,38 @@ class MetricAnalysisObject :
                 patches[i].set_facecolor(plt.cm.viridis(n[i]/max(n)))   
             axis[k].set_xlabel(r'GMM distance $d^{%s}_{\textrm{GMM}}$ for %s atoms'%(str(k+1),species))
             axis[k].set_ylabel(r'Probability density')
+        
+        # TO DEBUG
+        desc_transform = self.pca_model._get_pca_model(list_atom_species, species, n_component=2)
+        cm = plt.cm.get_cmap('gnuplot')
+
+        scat = axis[-1].scatter(desc_transform[:,0],desc_transform[:,1],
+                               c=self.get_gmm_distance(list_gmm),
+                               cmap=cm,
+                               edgecolors='grey',
+                               linewidths=0.5,
+                               alpha=0.5)
+        
+
+        # center 
+        desc_transform_center = self.add_centers_for_PCA('GMM',name_model,species).reshape(1,-1)
+        center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
+                                      c='red',
+                                      edgecolors='grey',
+                                      marker='D',
+                                      s=49)
+        print('... PCA analysis is done ...'.format(species))
+        axis[-1].set_xlabel(r'First principal component for %s atoms'%(species))
+        axis[-1].set_ylabel(r'Second principal component for %s atoms'%(species))
+        cbar = fig.colorbar(scat,ax=axis[-1])
+        cbar.set_label(r'GMM distances $d_{\textrm{GMM}}$', rotation=270)
+        
         plt.tight_layout()
 
-        plt.savefig('{:s}_{:s}_gmm_analysis.pdf'.format(species,name_model),dpi=300)
+        plt.savefig('{:s}_{:s}_gmm_analysis.png'.format(species,name_model),dpi=300)
 
+    def get_gmm_distance(self, array_distance : np.ndarray) -> np.ndarray : 
+        return np.array([np.amin(array_distance[k,:]) for k in range(array_distance.shape[0]) ])
 
     def fit_mahalanobis_envelop(self, species : str, 
                                 name_model : str,
@@ -380,10 +418,10 @@ class MetricAnalysisObject :
         TODO write doc
         """
         #TODO_cos the version list do not work ... 
-        #if list_atoms is None : 
-        list_atom_species = self._get_all_atoms_species(species)
-        #else : 
-        #    list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
+        if list_atoms is None : 
+            list_atom_species = self._get_all_atoms_species(species)
+        else : 
+            list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
 
         array_desc_selected = np.concatenate([ ats.get_array('milady-descriptors') for ats in list_atom_species ])
         print('... Starting Mahalanobis fit for {:} atoms ...'.format(species))
@@ -431,44 +469,55 @@ class MetricAnalysisObject :
                                edgecolors='grey',
                                linewidths=0.5,
                                alpha=0.5)
+        
+        # center 
+        desc_transform_center = self.add_centers_for_PCA('MAHA',name_model,species).reshape(1,-1)
+        center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
+                                      c='red',
+                                      edgecolors='grey',
+                                      marker='D',
+                                      s=49)
         print('... PCA analysis is done ...'.format(species))
         axis[1].set_xlabel(r'First principal component for %s atoms'%(species))
         axis[1].set_ylabel(r'Second principal component for %s atoms'%(species))
         cbar = fig.colorbar(scat,ax=axis[1])
-        cbar.set_label(r'MCD disctances $d_{\textrm{MCD}}$', rotation=270)
+        cbar.set_label(r'MCD disctances $d_{\textrm{Maha}}$', rotation=270)
         plt.tight_layout()
 
         plt.savefig('{:s}_{:s}_mahalanobis_analysis.png'.format(species,name_model),dpi=300)
 
-#######################################################
-    
 
-def custom_writer(atoms : Atoms, path : str, property : str = 'mcd-distance',**kwargs) : 
-    """TODO Write doc"""
-    if property == 'logistic-score' : 
-        class_to_plot = kwargs['class_to_plot']
+    def add_centers_for_PCA(self, kind : str,
+                            name_model : str,
+                            species : str) -> np.ndarray : 
+        """Litte method to add reference center positions in PCA analysis
+        
+        Parameters
+        ----------
 
-    dic = {el:k+1 for k, el in enumerate(atoms.symbols.species())}
-    cell = atoms.cell[:]
-    with open(path,'w') as w : 
-        w.write('Custom writing ...\n')
-        w.write('\n')
-        w.write('{:5d} atoms \n'.format(atoms.get_global_number_of_atoms()))
-        w.write('{:2d} atom types \n'.format(len(dic)))
-        w.write('{:1.9f} {:3.9f} xlo xhi \n'.format(0,cell[0,0]))
-        w.write('{:1.9f} {:3.9f} ylo zhi \n'.format(0,cell[1,1]))
-        w.write('{:1.9f} {:3.9f} zlo zhi \n'.format(0,cell[2,2]))
-        w.write('\n')
-        w.write('\n')
-        w.write('Atoms \n')
-        w.write('\n')
-        atoms_property = atoms.get_array(property)
-        if property == 'logistic-score' :
-            atoms_property = atoms_property[:,class_to_plot]
+        kind : str
+            Kind of reference model: MCD, GMM, MAHA...
 
-        for id, pos in enumerate(atoms.get_positions()) : 
-            w.write('{:5d} {:2d} {:3.9f} {:3.9f} {:3.9f} {:3.9f} \n'.format(id+1,dic[atoms[id].symbol],atoms_property[id],pos[0],pos[1],pos[2]))
-    return
+        name_model : str
+            Name of the model 
 
+        species : str
+            Species associated to the model
 
+        Returns
+        -------
 
+        np.ndarray
+            Associated reference center positions
+        
+        """
+        if kind == 'MCD' : 
+            center = self.meta_model.meta[name_model].models[species]['mcd'].location_.reshape(1,-1)
+           
+        elif kind == 'MAHA' : 
+            center = self.meta_model.meta[name_model].models[species]['mean_vector'].reshape(1,-1)
+
+        elif kind == 'GMM' : 
+            center = self.meta_model.meta[name_model].models[species]['gmm'].means_
+        
+        return self.pca_model.models[species]['PCA'].transform(center)

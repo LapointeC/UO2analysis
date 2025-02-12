@@ -1,2 +1,1 @@
-from .BaseParser import BaseParser
-from .BaseParser import UNSEENConfigParser
+from .unseen_parser import UNSEENConfigParser

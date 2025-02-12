@@ -1,7 +1,7 @@
 import os, sys
 import pickle
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import   DBManager, \
                     Milady, Regressor, Optimiser, Descriptor, \
                     ThermicSampling, ThermicFiting, \

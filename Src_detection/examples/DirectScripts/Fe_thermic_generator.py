@@ -1,6 +1,6 @@
 import os, sys, shutil
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import HarmonicThermicGenerator
 
 ################################

@@ -130,7 +130,7 @@ class MahalanobisModel :
             #debug_cos I replaced that ...
             #atoms.set_array(f'mahalanobis-distance-{self.name}',np.sqrt(mcd_distance), dtype=float)
             #debug_cos into that ...
-            atoms.set_array(f'mahalanobis-distance-{self.name}',mcd_distance, dtype=float)
+            atoms.set_array(f'maha-distance-{self.name}',mcd_distance, dtype=float)
 
         [local_setting_mahalanobis(atoms) for atoms in list_atoms]
 

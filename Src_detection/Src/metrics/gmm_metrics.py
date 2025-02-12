@@ -55,14 +55,25 @@ class GMMModel :
             Dictionnary of parameters for GMM : (i) n_components, (ii) covariance_type and (iii) init_params
 
         """
+
+        defaults_dict_gaussian = {'n_components':2,
+                              'covariance_type':'full',
+                              'init_params':'kmeans', 
+                              'max_iter':100,
+                              'weight_concentration_prior_type':'dirichlet_process',
+                              'weight_concentration_prior':0.5}
+        
+        for key, val in dict_gaussian.items() : 
+            defaults_dict_gaussian[key] = val
+
         self.models[species] = {'gmm':None,
                                 'distribution':None}
-        self.models[species]['gmm'] = BayesianGaussianMixture(n_components=dict_gaussian['n_components'], 
-                                                          covariance_type=dict_gaussian['covariance_type'],
-                                                          init_params=dict_gaussian['init_params'],
-                                                          max_iter=dict_gaussian['max_iter'],
-                                                          weight_concentration_prior_type=dict_gaussian['weight_concentration_prior_type'],
-                                                          weight_concentration_prior=dict_gaussian['weight_concentration_prior'],
+        self.models[species]['gmm'] = BayesianGaussianMixture(n_components=defaults_dict_gaussian['n_components'], 
+                                                          covariance_type=defaults_dict_gaussian['covariance_type'],
+                                                          init_params=defaults_dict_gaussian['init_params'],
+                                                          max_iter=defaults_dict_gaussian['max_iter'],
+                                                          weight_concentration_prior_type=defaults_dict_gaussian['weight_concentration_prior_type'],
+                                                          weight_concentration_prior=defaults_dict_gaussian['weight_concentration_prior'],
                                                           n_init=10)
         self.models[species]['gmm'].fit(desc_selected)
         self.n_components = dict_gaussian['n_components']
@@ -141,6 +152,10 @@ class GMMModel :
             mean_gmm = model.means_
             invcov_gmm = model.precisions_ 
             array_distance = np.empty((X.shape[0],invcov_gmm.shape[0]))
+
+            # diagonal case for gmm
+            if len(invcov_gmm.shape) < 3 :
+                invcov_gmm = np.array([ np.diag(invcov_gmm[i,:]) for i in range(invcov_gmm.shape[0]) ])
 
             for i in range(array_distance.shape[1]):
                 array_distance[:,i] = np.diag(((X-mean_gmm[i,:])@invcov_gmm[i,:,:])@(X-mean_gmm[i,:]).T)

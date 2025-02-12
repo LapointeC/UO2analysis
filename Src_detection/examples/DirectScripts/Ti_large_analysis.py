@@ -1,14 +1,13 @@
 import os, sys
 import glob
 import pickle
-import numpy as np
 
 sys.path.append(os.getcwd())
 
 from ase import Atoms, Atom
 from ase.io import read
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import DBDictionnaryBuilder, DBManager, \
                   Milady, Optimiser, Regressor, Descriptor, \
                   DfctAnalysisObject, \
@@ -21,10 +20,12 @@ matplotlib.use('Agg')
 
 from ovito.pipeline import Pipeline, PythonSource
 
+
+from typing import List
 from PySide6.QtCore import QEventLoop
 from PySide6.QtWidgets import QApplication
 
-from typing import List, Dict, Any
+from typing import List, Dict
 plt.rcParams['text.usetex'] = True
 
 
@@ -39,53 +40,15 @@ def change_species(atoms : Atoms, species : List[str]) -> Atoms :
         at.symbol = species[id_at]
     return atoms 
 
-
-def VacancySelectionFunction(atoms : Atoms,
-                             dic_properties : Dict[str, Any]) -> List[int] : 
-    """Custom function for vacancy selection"""
-    threshold_mean_volume = dic_properties['atomic-volume']['threshold-std']
-    voronoi = atoms.get_array('atomic-volume').flatten()
-    mean_volume = np.mean(voronoi)
-
-    threshold_mcd = dic_properties['mcd-distance']['threshold-std']
-    mcd_distance = atoms.get_array('mcd-distance').flatten()
-    max_mcd = np.amax(mcd_distance)
-
-    # mask time !
-    mask_volume = voronoi > (1.0 + threshold_mean_volume)*mean_volume
-    mask_mcd = mcd_distance/max_mcd > threshold_mcd
-
-    full_mask = mask_volume & mask_mcd
-    return np.where(full_mask)[0]
-
-def InterstitialSelectionFunction(atoms : Atoms,
-                             dic_properties : Dict[str, Any]) -> List[int] : 
-    """Custom function for interstitial selection"""
-    threshold_mean_volume = dic_properties['atomic-volume']['threshold-std']
-    voronoi = atoms.get_array('atomic-volume').flatten()
-    mean_volume = np.mean(voronoi)
-
-    threshold_mcd = dic_properties['mcd-distance']['threshold-std']
-    mcd_distance = atoms.get_array('mcd-distance').flatten()
-    max_mcd = np.amax(mcd_distance)
-
-    # mask time !
-    mask_volume = voronoi < (1.0 + threshold_mean_volume)*mean_volume
-    mask_mcd = mcd_distance/max_mcd > threshold_mcd
-
-    full_mask = mask_volume & mask_mcd
-    return np.where(full_mask)[0]
-
-#######################################################
-
 ########################################################
 ### INPUTS
 ########################################################
+#path_dfct = '/home/lapointe/ToMike/data/shortlab-2021-Ti-Wigner-04b16ab/3_SIM/1_Annealing/Files/A92-10-8000-570.xyz'
 path_dfct = '/home/lapointe/WorkML/TiAnalysis/pka_data'
 dic_sub_class = {'pka_data':'00_000'}
 milady_compute = False
-pickle_data_file = '/home/lapointe/WorkML/TiAnalysis/Src/data_pka.pickle'
-pickle_model_file = '/home/lapointe/WorkML/TiAnalysis/Src/MCD.pickle'
+pickle_data_file = 'data_pka.pickle'
+pickle_model_file = 'MCD.pickle'
 
 
 if milady_compute : 
@@ -144,24 +107,28 @@ else :
     print('... Starting analysis ...')
     for id, key_conf in enumerate(previous_dbmodel.model_init_dic.keys()) : 
         print(' ... Analysis for : {:s} ...'.format(key_conf))
-        # Compute needed properies for vacancy analysis
         atom_conf = dfct_analysis.one_the_fly_mcd_analysis(previous_dbmodel.model_init_dic[key_conf]['atoms'])
         dfct_analysis.VoronoiDistribution(atom_conf,'Ti',nb_bin=50)
+        print('... Starting vacancies analysis ...')
+        dfct_analysis.VacancyAnalysis(atom_conf,0.3, elliptic = 'iso')
+        print('... Starting DXA analysis ...')
+        dfct_analysis.DXA_analysis(atom_conf,'hcp')
+        print(' ... MCD distances are filled for {:s} ...'.format(key_conf))
 
-        print('... Starting vacancy analysis ...')
-        dfct_analysis.PointDefectAnalysisFunction(atom_conf,
-                                                  VacancySelectionFunction,
-                                                  {'atomic-volume':{'threshold-std':0.1},
-                                                   'mcd-distance':{'threshold-std':0.1}},
-                                                  kind='vacancy',
-                                                  elliptic='iso')
-        print('... Starting interstitial analysis ...')
-        dfct_analysis.PointDefectAnalysisFunction(atom_conf,
-                                                  InterstitialSelectionFunction,
-                                                  {'atomic-volume':{'threshold-std':0.1},
-                                                   'mcd-distance':{'threshold-std':0.1}},
-                                                  kind='vacancy',
-                                                  elliptic='iso')
+        if id == 0 : 
+            print('... MCD distribution analysis ...')
+            dfct_analysis.MCDDistribution(atom_conf,'Ti',nb_bin=100,threshold=0.05)
+            atoms_config : List[Atoms] = [atom_conf]
+            break
 
-        dfct_analysis.GetAllPointDefectData('.point_dfct.data')
-        print('... Analysis is done :) ...')
+    frame_object = FrameOvito(atoms_config)
+    logistic_modifier = MCDModifier(init_transparency=1.0,
+                                    threshold_mcd=0.05,
+                                    color_map='viridis')
+
+    pipeline_config = Pipeline(source = PythonSource(delegate=frame_object))
+    pipeline_config.modifiers.append(logistic_modifier.PerformMCDVolumeSelection)
+    for frame in range(pipeline_config.source.num_frames) :
+        data = pipeline_config.compute(frame)
+
+    pipeline_config.add_to_scene()

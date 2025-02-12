@@ -1,4 +1,8 @@
 <Configuration>
+    <PickleMetaModel>
+        <path>/home/lapointe/WorkML/Unseen_dev/examples/WithRefs/References</path>
+    </PickleMetaModel>
+    
     <Auto>
         <name>bulk_BCC</name>
         <directory>Auto/bulk_BCC</directory>
@@ -13,8 +17,10 @@
         </MCD>
         <GMM>
             <gmm_options>
-                <n_components>3</n_components>
-                <covariance_type>diag</covariance_type>
+                <dic_gaussian>
+                    <n_components>2</n_components>
+                    <covariance_type>diag</covariance_type>
+                </dic_gaussian>
             </gmm_options>
         </GMM>
     </Auto>

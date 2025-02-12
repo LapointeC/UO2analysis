@@ -90,6 +90,8 @@ class LogisticRegressor :
         """
         return self.models[species]['logistic_regressor'].predict_proba(array_desc)
     
+
+    
     def _write_pkl(self, path_writing : os.PathLike[str] = './mcd.pkl') -> None : 
         """Write pickle file for ```MCDModel``` object
         

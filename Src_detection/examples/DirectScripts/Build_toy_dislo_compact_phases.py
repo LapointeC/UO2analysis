@@ -4,7 +4,7 @@ import numpy as np
 #Line needed to work with ovito graphical mode
 sys.path.append(os.getcwd())
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import InputsDictDislocationBuilder, DislocationsBuilder, \
                   InputsCompactPhases, C15Builder, A15Builder, \
                   FrameOvito, NaiveOvitoModifier

@@ -2,10 +2,10 @@ import os, sys
 import pickle
 from typing import List, Dict, Any
 
-sys.path.insert(0,'/home/marinica/GitHub/UO2analysis.git/Src_detection')
+sys.path.insert(0,'/home/lapointe/WorkML/Unseen_dev/')
 os.system('pwd') 
 #from Src import ReferenceBuilder
-from Src.parser.BaseParser import UNSEENConfigParser
+from Src.parser.unseen_parser import UNSEENConfigParser
 from Src.analysis.reference import ReferenceBuilder, InferenceBuilder
 from Src.mld.milady import ComputeDescriptor
 
@@ -94,8 +94,8 @@ if __name__ == "__main__":
     cdir = os.getcwd()
     
     milady_compute = False
-    unseen_train = True 
-    unseen_inference = True 
+    unseen_train = False
+    unseen_inference = True
     
     if auto_config:
         # Get the MD files directory, MD file format, and a name for the pickle file
@@ -151,14 +151,15 @@ if __name__ == "__main__":
     
     if unseen_train:
         try:
-            builder = ReferenceBuilder(species='Fe', auto_config=auto_config, custom_config=custom_config)
+            builder = ReferenceBuilder(auto_config=auto_config, 
+                                       custom_config=custom_config)
             
             if auto_config:
                 builder.process_auto_config()
             
             if custom_config:
                  builder.process_custom_references()
-                
+            
             print("\n" + "="*50)
             print("Model Building Complete".center(50))
             print("="*50)
@@ -200,13 +201,14 @@ if __name__ == "__main__":
             cd_inference.compute()
             os.chdir(cdir)    
             
-        try: 
-            inference = InferenceBuilder(species='Fe', inference_config=inference_config, 
-                                        auto_config=auto_config, custom_config=custom_config)  
-            inference.run_auto_config()
-        except Exception as e:
-            print(f"\nError during model inference: {str(e)}")
-            sys.exit(1)
+        #try: 
+        inference = InferenceBuilder(inference_config=inference_config, 
+                                    auto_config=auto_config, 
+                                    custom_config=custom_config)  
+        inference.run_inference()
+        #except Exception as e:
+        #    print(f"\nError during model inference: {str(e)}")
+        #    sys.exit(1)
             
     
             

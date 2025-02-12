@@ -26,26 +26,26 @@ class MetaModel :
             raise NotImplementedError(f'... Model type {kind} is not implemented ...')
 
     def _update_meta_data(self, name_model : str, meta_data : Any) -> None : 
-        """Update name of ```MCDModel```
+        """Update name in ```MetaModel```
         
         Parameters
         ----------
 
         name : str
-            New name for ```MCDModel```
+            New name in ```MetaModel```
         """
         
         self.meta_data[name_model] = meta_data
         return 
 
     def _update_meta_kind(self, name_model : str, kind : str) -> None : 
-        """Update name of ```MCDModel```
+        """Update kind in ```MetaModel```
         
         Parameters
         ----------
 
         name : str
-            New name for ```MCDModel```
+            New kind in ```MetaModel```
         """
         
         self.meta_kind[name_model] = kind

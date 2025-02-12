@@ -2,7 +2,7 @@ import os, sys
 import glob
 import pickle
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import DBManager, DBDictionnaryBuilder, \
                   Milady, Regressor, Optimiser, Descriptor, \
                   my_cfg_reader, \

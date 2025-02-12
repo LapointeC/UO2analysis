@@ -1,4 +1,8 @@
 <Configuration>
+    <PickleMetaModel>
+        <path>/home/lapointe/WorkML/Unseen_dev/examples/WithRefs/References</path>
+    </PickleMetaModel>
+    
     <Custom>
         <Reference>
             <name>bulk_C15</name>
@@ -42,8 +46,8 @@
     </Custom>
 
     <Inference>
-      <name>FeFPA300K</name>
-      <directory>Analyze/data</directory>
+      <name>testC15</name>
+      <directory>Analyse/data</directory>
       <id_atoms>all</id_atoms>
       <md_format>poscar</md_format>
     </Inference>

@@ -5,7 +5,7 @@ import pickle
 from ase import Atoms
 from ase.io import read
 
-sys.path.insert(0,'../')
+sys.path.insert(0,'../../')
 from Src import DBManager, DBDictionnaryBuilder, \
                   Optimiser, Regressor, Descriptor, Milady, \
                   MCDAnalysisObject

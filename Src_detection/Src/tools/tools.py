@@ -3,6 +3,7 @@ import numpy as np
 
 from typing import List, Dict
 from difflib import SequenceMatcher
+from ase import Atoms
 
 def BuildingFunction(path_dir : os.PathLike[str]) -> List[os.PathLike[str]] :
     """Build the list of directories from an initial directory
@@ -172,3 +173,30 @@ def merge_dict_(dict : Dict[int,List[int]]) -> Dict[int,List[int]] :
         dict_m[key] = u_list
 
     return dict_m
+
+def custom_writer(atoms : Atoms, path : str, property : str = 'mcd-distance',**kwargs) : 
+    """TODO Write doc"""
+    if property == 'logistic-score' : 
+        class_to_plot = kwargs['class_to_plot']
+
+    dic = {el:k+1 for k, el in enumerate(atoms.symbols.species())}
+    cell = atoms.cell[:]
+    with open(path,'w') as w : 
+        w.write('Custom writing ...\n')
+        w.write('\n')
+        w.write('{:5d} atoms \n'.format(atoms.get_global_number_of_atoms()))
+        w.write('{:2d} atom types \n'.format(len(dic)))
+        w.write('{:1.9f} {:3.9f} xlo xhi \n'.format(0,cell[0,0]))
+        w.write('{:1.9f} {:3.9f} ylo zhi \n'.format(0,cell[1,1]))
+        w.write('{:1.9f} {:3.9f} zlo zhi \n'.format(0,cell[2,2]))
+        w.write('\n')
+        w.write('\n')
+        w.write('Atoms \n')
+        w.write('\n')
+        atoms_property = atoms.get_array(property)
+        if property == 'logistic-score' :
+            atoms_property = atoms_property[:,class_to_plot]
+
+        for id, pos in enumerate(atoms.get_positions()) : 
+            w.write('{:5d} {:2d} {:3.9f} {:3.9f} {:3.9f} {:3.9f} \n'.format(id+1,dic[atoms[id].symbol],atoms_property[id],pos[0],pos[1],pos[2]))
+    return
