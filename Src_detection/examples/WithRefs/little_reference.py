@@ -2,7 +2,7 @@ import os, sys
 import pickle
 from typing import List, Dict, Any
 
-sys.path.insert(0,'/home/lapointe/WorkML/Unseen_dev/')
+sys.path.insert(0,'/home/lapointe/Git/UO2analysis/Src_detection')
 os.system('pwd') 
 #from Src import ReferenceBuilder
 from Src.parser.unseen_parser import UNSEENConfigParser
@@ -93,8 +93,8 @@ if __name__ == "__main__":
     #put current directory into some variable: 
     cdir = os.getcwd()
     
-    milady_compute = False
-    unseen_train = False
+    milady_compute = True
+    unseen_train = True
     unseen_inference = True
     
     if auto_config:

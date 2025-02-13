@@ -1,6 +1,6 @@
 <Configuration>
     <PickleMetaModel>
-        <path>/home/lapointe/WorkML/Unseen_dev/examples/WithRefs/References</path>
+        <path>References</path>
     </PickleMetaModel>
     
     <Auto>
