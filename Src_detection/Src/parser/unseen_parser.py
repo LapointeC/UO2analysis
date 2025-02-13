@@ -51,6 +51,21 @@ class UNSEENConfigParser:
         self.inference_config = {}    
         self.path_metamodel_pkl = os.getcwd()
 
+    def boolean_converter(self, str_xml : str) -> bool :
+        """Convert string chain into boolean 
+        Parameters 
+        ----------
+        str_xml : str
+            string to convert 
+        Returns 
+        -------
+        bool
+        """
+        if str_xml in ['true' ,'True', '.TRUE.','.True.', 'Yes'] :
+            return True
+        if str_xml in ['false', 'False', '.FALSE.', '.False.' ,'No'] :
+            return False 
+
     def parse(self) -> None:
         """Main parsing method to process Auto and Custom tags"""
         for child in self.root:
@@ -143,6 +158,7 @@ class UNSEENConfigParser:
 
         # Add metamodel path 
         self.auto_config['path_metamodel_pkl'] = self.path_metamodel_pkl
+        self.auto_config['contour'] = self.boolean_converter(element.findtext('contour', default='False').strip())
 
     def parse_custom(self, element: ET.Element) -> None:
         """Parse <Custom> configuration containing multiple <Reference> entries"""
@@ -221,6 +237,7 @@ class UNSEENConfigParser:
             
             # Add metamodel path 
             ref['path_metamodel_pkl'] = self.path_metamodel_pkl
+            ref['contour'] = self.boolean_converter(ref_elem.findtext('contour', default='False').strip())
 
             self.custom_config.append(ref)
 

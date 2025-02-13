@@ -10,6 +10,7 @@ from typing import Dict, List, TypedDict, Tuple
 
 from ..mld import DBDictionnaryBuilder, \
                   write_milady_poscar
+from ase.io import write
 
 import time
 import h5py
@@ -178,24 +179,43 @@ class AtomsAssembly :
                                 'covariance':covariance,
                                 'name_poscar':name_poscar} 
 
-class ThermicSampling : 
-    """"Thermic sampler object based on previous dynamical matrices calculations
-    Generate harmonic thermic noise for subset of configurations
-    """
-    def __init__(self, dic_size : Dict[str,List[int]], path_data : os.PathLike[str],
-                 temperature : float, 
-                 scaling_factor : Dict[str, float] = None,
-                 nb_sample : int = 1000,
-                 type_data : str = 'npz',
-                 save_diag : bool = False) -> None : 
-        """Init method for ```ThermicSampling``` object
+    def draft_config_writer(self, path_writing : os.PathLike[str], 
+                            extension : str = 'xyz') -> None : 
+        """Write draflty thermic configuration for ```AtomsAssembly``` object
         
         Parameters
         ----------
 
-        dic_size : Dict[str, List[int]]
-            Dictionnary with cristallographic structure as keys and associated size of system
-            Should be moved as optional argument ...
+        path_writing : os.PathLike[str]
+            Path to write geometry files 
+
+        extension : str
+            Type of extension for geometry files
+
+        """
+        for key, val in self.assembly.items() :
+            print(f'... Writing .xyz for {key} config ...')
+            for id, ats in enumerate(val) : 
+                write(f'{path_writing}/{key}_{id}.{extension}',
+                      ats,
+                      format=extension)
+        return 
+
+class ThermicSampling : 
+    """"Thermic sampler object based on previous dynamical matrices calculations
+    Generate harmonic thermic noise for subset of configurations
+    """
+    def __init__(self, path_data : os.PathLike[str],
+                 temperature : float, 
+                 scaling_factor : float = None,
+                 nb_sample : int = 1000,
+                 type_data : str = 'npz',
+                 save_diag : bool = False,
+                 symbols : str = None) -> None : 
+        """Init method for ```ThermicSampling``` object
+        
+        Parameters
+        ----------
 
         path_data : os.PathLike[str]
             Path to vibration data to extract
@@ -203,7 +223,7 @@ class ThermicSampling :
         temperature : float 
             Temperature of the sampling 
 
-        scaling_factor : Dict[str, float]
+        scaling_factor : float
             Scaling factor for temperature for each structure
 
         nb_sample : int 
@@ -215,34 +235,29 @@ class ThermicSampling :
         save_diag : bool
             if True, store into storing archive all the diagonalisation data
 
+        symbol : str
+            Manually set symbols for systems
+
         """
 
         self.kB = 8.6173303e-5
         self.eV_per_Da_radHz2 = 2.656e-26
         self.eV_per_Da_radTHz2 = 2.656e-6
 
-        self.dic_size = dic_size
         self.path_data = path_data
         self.temperature = temperature
         self.nb_sample = nb_sample
+        self.scaling_factor = scaling_factor
+        self.symbols = symbols
 
         self.type_data = type_data
         self.atoms_assembly : AtomsAssembly = None
         self.ml_dic : DBDictionnaryBuilder = None
 
-        if scaling_factor is not None : 
-            if len(scaling_factor) != len(self.dic_size) : 
-                raise ValueError('Number of scaling factor is not coherent with dictionnary')
-            else : 
-                self.scaling_factor = scaling_factor
-        else : 
-            self.scaling_factor = None
-            #self.scaling_factor = {key : 0.333 for key in self.dic_size.keys()}
-
         if self.type_data == 'npz' :
             self.dict_dynamical_matrix = self.read_npz_file()
         elif self.type_data == 'hdf5' :
-            self.dict_dynamical_matrix = self.read_hdf5_file()
+            self.dict_dynamical_matrix = self.read_hdf5_file(sym=symbols)
         else :
             raise NotImplementedError('This type of data is not implemented')
 
@@ -261,7 +276,7 @@ class ThermicSampling :
                                                                           'atoms':None}
         return dict_dynamical_matrix
 
-    def read_hdf5_file(self, sym : str = 'Fe') -> Dict[str, Dynamical] :
+    def read_hdf5_file(self, sym : str = None) -> Dict[str, Dynamical] :
         """Read vibration data from ```.h5``` file
         
         Parameters
@@ -274,15 +289,20 @@ class ThermicSampling :
         with h5py.File(self.path_data,'r') as r :
             dynamical_group = r['dynamical']
             for key, val in dynamical_group.items() :
-                cell = val['cell'][:,:]
+                cell = val['cell'][:]
                 positions = val['positions'][:,:]
-                symbol = [sym for _ in range(positions.shape[0] )]
+
+                if sym is None : 
+                    symbol = f'Fe{positions.shape[0]}'
+                else : 
+                    symbol = sym
+                
                 dict_dynamical_matrix[key] = {'dynamical_matrix':val['dynamical_matrix'][:,:],
                                               'omega2':None,
                                               'xi_matrix':None,
                                               'atoms':Atoms(symbols=symbol,positions=positions,cell=cell,pbc=[True,True,True])}
 
-                if len(dict_dynamical_matrix) > 15 : 
+                if len(dict_dynamical_matrix) > 1 : 
                     break
 
         return dict_dynamical_matrix
@@ -352,9 +372,9 @@ class ThermicSampling :
             
             if bool_im : 
                 warnings.warn('Dynamical matrix for {:} presents a problem and will be skiped ...')
-                key2del.append(struct)
-                #self.dict_dynamical_matrix[struct]['omega2'] = stable_eigen_values
-                #self.dict_dynamical_matrix[struct]['xi_matrix'] = stable_eigen_vectors
+
+                self.dict_dynamical_matrix[struct]['omega2'] = stable_eigen_values
+                self.dict_dynamical_matrix[struct]['xi_matrix'] = stable_eigen_vectors
             else :
                 self.dict_dynamical_matrix[struct]['omega2'] = stable_eigen_values
                 self.dict_dynamical_matrix[struct]['xi_matrix'] = stable_eigen_vectors
@@ -366,7 +386,13 @@ class ThermicSampling :
 
         [self.dict_dynamical_matrix.pop(key) for key in key2del] 
 
-    def generate_harmonic_thermic_noise(self, temperature : float, Umatrix : np.ndarray, omega2_array : np.ndarray, atoms : Atoms, scaling_factor : float = 1.0, sigma_number : float = 2.0) -> Atoms :
+    def generate_harmonic_thermic_noise(self, temperature : float, 
+                                        Umatrix : np.ndarray, 
+                                        omega2_array : np.ndarray, 
+                                        atoms : Atoms, 
+                                        scaling_factor : float = 1.0, 
+                                        sigma_number : float = 2.0,
+                                        only_noise : bool = True) -> Atoms :
         """Generate thermic noise on atoms for a given temperature
         Amplitude of displacement are based on equipartion theorem at debye frequency
 
@@ -414,8 +440,14 @@ class ThermicSampling :
         cartesian_displacement = Umatrix@noise_displacement_vector
         
         # here we only keep the displacements ...
-        atoms.positions = cartesian_displacement.reshape( (len(atoms),3) )
-        return atoms    
+        atoms_copy = atoms.copy()
+
+        if only_noise :
+            atoms_copy.positions = cartesian_displacement.reshape( (len(atoms),3) )
+        else : 
+            atoms_copy.positions += cartesian_displacement.reshape( (len(atoms),3) )
+        
+        return atoms_copy    
 
     def GenerateDBDictionnary(self, atoms_assembly : AtomsAssembly) -> Tuple[dict, dict] : 
         """Generate the ```DBDictionnary``` object associated to a given ```AtomsAssembly``` object 
@@ -423,7 +455,7 @@ class ThermicSampling :
         Parameters
         ----------
 
-        atoms_assembly : AtomsAssembly 
+        atoms_assembly : ```AtomsAssembly``` 
             ```AtomsAssembly``` object to convert 
 
         Returns:
@@ -482,50 +514,52 @@ class ThermicSampling :
         self.ml_dic = ml_dic
         return
 
-    def build_covariance_estimator_basic(self, path_writing : os.PathLike[str] = './ml_poscar', symbol : str = 'Fe') -> None :
-        """Build displacement covariance estimator for whole data based on thermic harmonic vibration sampling (debug version)...
+    def generate_harmonic_noise_configurations(self, path_writing : os.PathLike[str], 
+                                nb_sigma : float = 1.5,
+                                extension : str = 'xyz') -> None :
+        """Generate thermic configurations based on frozen phonon approximation
         
-        Parameters
+        Parameters 
         ----------
 
         path_writing : os.PathLike[str]
-            Path to write ```milady``` poscars
+            path to write thermic configurations
 
-        symbol : str 
-            Species associted to the systems
+        nb_sigma : float
+            Maximum number of sigma for atomic displacements
 
+        extension : str
+            Type of extension for writing
         """
         
-        warnings.warn(f'build_covariance_estimator_basic is decrapeted ! use build_covariance_estimator instead')
-        atoms_assembly = AtomsAssembly()
-        for struct in self.dict_dynamical_matrix.keys() :
-            print('... Starting covariance estimation for {:}'.format(struct))
-            solid_ase = SolidAse(self.dic_size[struct],symbol,self.Fe_data.dic_a0[struct])
-            atoms_solid = solid_ase.structure(struct)
-            atoms_solid2keep = atoms_solid.copy()
-            for _ in range(self.nb_sample) : 
-                atoms_k = self.generate_harmonic_thermic_noise(self.temperature, 
-                                                     self.dict_dynamical_matrix[struct]['xi_matrix'],
-                                                     self.dict_dynamical_matrix[struct]['omega2'],
-                                                     atoms_solid, 
-                                                     self.scaling_factor[struct])
-                atoms_assembly.update_assembly(struct,atoms_k.copy())
-            displacement_covariance = atoms_assembly.extract_covariance_matrix_atom(struct)
-            atoms_assembly.fill_MLdata(struct,atoms_solid2keep,displacement_covariance)
-            print()
-
-        print('... Dictionnary object is generated ...')
-        _, ml_dic = self.GenerateDBDictionnary(atoms_assembly)
-        self.fill_dictionnaries(atoms_assembly, ml_dic)
-        #print(dic_equiv)
-        print('... Writing POSCAR files for Milady ...')
-        if not os.path.exists(path_writing) : 
+        if not os.path.exists(path_writing) :
             os.mkdir(path_writing)
         else : 
             shutil.rmtree(path_writing)
             os.mkdir(path_writing)
-        self.writer(ml_dic, path_writing)
+
+        atoms_assembly = AtomsAssembly()
+        for struct, obj in self.dict_dynamical_matrix.items() :
+            print('... Starting thermic sampling for {:}'.format(struct))
+            atoms_solid = obj['atoms']
+            for id_sample in range(self.nb_sample) :
+                
+                if id_sample%(int(0.1*self.nb_sample)) == 0 : 
+                    print(f'    {id_sample} / {self.nb_sample} iterations ...')
+                atoms_k = self.generate_harmonic_thermic_noise(self.temperature,
+                                                     obj['xi_matrix'],
+                                                     obj['omega2'],
+                                                     atoms_solid,
+                                                     scaling_factor= 0.333 if self.scaling_factor is None else self.scaling_factor,
+                                                     sigma_number=nb_sigma,
+                                                     only_noise=False)
+                
+                atoms_assembly.update_assembly(struct,atoms_k.copy())
+            print()
+        atoms_assembly.draft_config_writer(path_writing, extension=extension)
+
         return 
+
 
     def build_covariance_estimator(self, path_writing : os.PathLike[str] = './ml_poscar', nb_sigma : float = 1.5) -> None :
         """Build displacement covariance estimator for whole data based on thermic harmonic vibration sampling
@@ -554,7 +588,7 @@ class ThermicSampling :
                                                      obj['xi_matrix'],
                                                      obj['omega2'],
                                                      atoms_solid,
-                                                     scaling_factor= 0.333 if self.scaling_factor is None else self.scaling_factor[struct],
+                                                     scaling_factor= 0.333 if self.scaling_factor is None else self.scaling_factor,
                                                      sigma_number=nb_sigma)
                 atoms_assembly.update_assembly(struct,atoms_k.copy())
             displacement_covariance = atoms_assembly.extract_covariance_matrix_atom(struct)

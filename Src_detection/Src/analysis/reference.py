@@ -5,7 +5,7 @@ from ase.io import read
 from ase import Atoms
 
 from ..metrics import MetaModel, PCAModel
-from ..mld import DBManager, DBtype
+from ..mld import DBManager
 from .library_mcd_multi import MetricAnalysisObject
 
 from ..tools import timeit
@@ -156,13 +156,14 @@ class ReferenceBuilder:
         # Get model parameters from config
         #model_params = config.get(name_model, {})
         model_params = config.get(model_kind, {})
-
+        
         try:
             if model_kind == 'GMM':
                 self.meta_metric.fit_gmm_envelop(
                     species=species,
                     name_model=name_model,
                     list_atoms=list_atoms,
+                    contour=config.get('contour', False),
                     nb_bin_histo=model_params.get('nb_bin_histo', 100),
                     nb_selected=model_params.get('nb_selected', 10000),
                     dict_gaussian=model_params.get('dic_gaussian', {
@@ -182,14 +183,16 @@ class ReferenceBuilder:
                     list_atoms=list_atoms,
                     contamination=model_params.get('contamination', 0.05),
                     nb_bin=model_params.get('nb_bin_histo', 100),
-                    nb_selected=model_params.get('nb_selected', 10000)
+                    nb_selected=model_params.get('nb_selected', 10000),
+                    contour=config.get('contour', False)
                 )   
                 
             elif model_kind == 'MAHA':
                 self.meta_metric.fit_mahalanobis_envelop(
                     species=species,
                     name_model=name_model,
-                    list_atoms=list_atoms
+                    list_atoms=list_atoms,
+                    contour=config.get('contour', False),
                 )
                 #self.meta_metric.store_model_pickle(f'{where_is_the_model}')
                 
@@ -228,36 +231,7 @@ class InferenceBuilder:
         self.dict_data : DBManager = None 
 
         self._load_models()
-
-#    def run_auto_config(self) -> None:
-#        """Run the Auto models from provided dictionary"""
-#        if not self.auto_config:
-#            print("No Auto configuration available")
-#            return
-#
-#        print("\n" + "-"*30)
-#        print("Running Auto Models".center(30))
-#        print("-"*30)
-#        
-#        directory = self.auto_config['directory']
-#        #TODO_cos this should be changed I keep here it in order to be compatible with the former version ... 
-#        name_label = self.auto_config['name']
-#        
-#
-#        for model_kind in ['MCD', 'GMM', 'MAHA']:
-#            if self.auto_config['models'].get(model_kind, False):
-#                print(f"\nRunning {model_kind} model for {name_label}")
-#                self._run_model(
-#                    config=self.auto_config,
-#                    inference=self.infer_config,
-#                    directory=directory,
-#                    species=self.species,
-#                    name_label = name_label,
-#                    model_kind = model_kind,
-#                    name_model=f"Auto_{name_label}"
-#                )
-    
-
+   
     def _load_models(self) -> None:
         """Load pre-trained models from pickle files"""
         model_dir = self.infer_config.get('path_metamodel_pkl', '')
@@ -266,17 +240,6 @@ class InferenceBuilder:
         except : 
             self.metamodel._load_pkl(f"{model_dir}/auto_metamodel.pkl")
         return
-
-        #for model_type in ['MCD', 'GMM', 'MAHA']:
-        #    model_path = os.path.join(model_dir, f"{self.config['name']}_ref_model.pickle")
-        #    if os.path.exists(model_path):
-        #        try:
-        #            self.models[model_type] = pickle.load(open(model_path, 'rb'))
-        #            print(f"Loaded {model_type} model from {model_path}")
-        #        except Exception as e:
-        #            print(f"Error loading {model_type} model: {str(e)}")
-        #    else:
-        #        print(f"No {model_type} model found at {model_path}")
 
     def run_inference(self) -> None:
         """Main method to execute full inference pipeline"""

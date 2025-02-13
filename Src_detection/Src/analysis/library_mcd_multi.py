@@ -16,6 +16,7 @@ matplotlib.use('Agg')
 
 from typing import List, Dict, TypedDict
 import matplotlib.pyplot as plt
+import matplotlib.tri as tri
 
 plt.rcParams['text.usetex'] = True
 plt.rcParams['text.latex.preamble'] = r'\usepackage{amsmath}'
@@ -210,8 +211,9 @@ class MetricAnalysisObject :
                         name_model : str,
                         list_atoms : List[Atoms] = None,
                         contamination : float = 0.05, 
-                        nb_bin = 100, 
-                        nb_selected=10000) -> None : 
+                        nb_bin : int = 100, 
+                        nb_selected : int =10000,
+                        contour : bool = False) -> None : 
         """Perform MCD analysis for a given species
         species : str is the chemical symbol of the species to analyze e.g. 'U', 'O', 'Cu
         name_model : str is the name of the model to store
@@ -296,6 +298,15 @@ class MetricAnalysisObject :
                                linewidths=0.5,
                                alpha=0.5)
         
+        if contour :
+            triang = tri.Triangulation(desc_transform[:, 0], desc_transform[:, 1])
+            axis[1].tricontour(triang, 
+                               list_mcd,
+                               cmap=cm,
+                               levels=15,
+                               linestyles='dashdot',
+                               alpha=0.4)
+
         # center 
         desc_transform_center = self.add_centers_for_PCA('MCD',name_model,species).reshape(1,-1)
         center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
@@ -318,6 +329,7 @@ class MetricAnalysisObject :
                         list_atoms : List[Atoms] = None,
                         nb_bin_histo : int =100, 
                         nb_selected :int = 10000, 
+                        contour : bool = False,
                         dict_gaussian : dict = {'n_components':2, 'max_iter':100,
                                                             'covariance_type':'full',
                                                             'init_params':'kmeans'}) -> None : 
@@ -389,10 +401,20 @@ class MetricAnalysisObject :
                                linewidths=0.5,
                                alpha=0.5)
         
+        #contour
+        if contour : 
+            triang = tri.Triangulation(desc_transform[:, 0], desc_transform[:, 1])
+            for k in range(list_gmm.shape[1]) : 
+                axis[-1].tricontour(triang, 
+                                   list_gmm[:,k],
+                                   cmap=cm,
+                                   levels=15,
+                                   linestyles='dashdot',
+                                   alpha=0.4)
 
         # center 
-        desc_transform_center = self.add_centers_for_PCA('GMM',name_model,species).reshape(1,-1)
-        center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
+        desc_transform_center = self.add_centers_for_PCA('GMM',name_model,species)
+        center_scat = axis[-1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
                                       c='red',
                                       edgecolors='grey',
                                       marker='D',
@@ -412,7 +434,8 @@ class MetricAnalysisObject :
 
     def fit_mahalanobis_envelop(self, species : str, 
                                 name_model : str,
-                                list_atoms : List[Atoms] = None) -> None : 
+                                list_atoms : List[Atoms] = None,
+                                contour : bool = False) -> None : 
         """Perform MCD analysis for a given species
         
         TODO write doc
@@ -438,7 +461,7 @@ class MetricAnalysisObject :
         #mcd distribution 
         print('... Starting Mahalanobis analysis for {:s} atoms ...'.format(species))
         fig, axis = plt.subplots(nrows=1, ncols=2, figsize=(14,6))
-        list_mcd = np.concatenate([at.get_array(f'mahalanobis-distance-{name_model}') for at in updated_atoms], axis=0)
+        list_mcd = np.concatenate([at.get_array(f'maha-distance-{name_model}') for at in updated_atoms], axis=0)
         n, _, patches = axis[0].hist(list_mcd,density=True,bins=50,alpha=0.7)
         for i in range(len(patches)):
             patches[i].set_facecolor(plt.cm.viridis(n[i]/max(n)))        
@@ -477,6 +500,17 @@ class MetricAnalysisObject :
                                       edgecolors='grey',
                                       marker='D',
                                       s=49)
+        
+        # contour
+        if contour :
+            triang = tri.Triangulation(desc_transform[:, 0], desc_transform[:, 1])
+            axis[1].tricontour(triang, 
+                               list_mcd,
+                               cmap=cm,
+                               levels=15,
+                               linestyles='dashdot',
+                               alpha=0.4)
+
         print('... PCA analysis is done ...'.format(species))
         axis[1].set_xlabel(r'First principal component for %s atoms'%(species))
         axis[1].set_ylabel(r'Second principal component for %s atoms'%(species))
@@ -519,5 +553,5 @@ class MetricAnalysisObject :
 
         elif kind == 'GMM' : 
             center = self.meta_model.meta[name_model].models[species]['gmm'].means_
-        
+
         return self.pca_model.models[species]['PCA'].transform(center)
