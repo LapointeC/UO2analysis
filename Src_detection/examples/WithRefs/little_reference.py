@@ -3,6 +3,7 @@ import pickle
 from typing import List, Dict, Any
 
 sys.path.insert(0,'/home/lapointe/Git/UO2analysis/Src_detection')
+sys.path.insert(0,'/home/marinica/GitHub/UO2analysis.git/Src_detection/')
 os.system('pwd') 
 #from Src import ReferenceBuilder
 from Src.parser.unseen_parser import UNSEENConfigParser

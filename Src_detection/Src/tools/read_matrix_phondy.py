@@ -20,7 +20,8 @@ def add_or_update_dynamical(hdf5_group : Group,
                             dyn_index : str, 
                             dynamical_matrix : np.ndarray, 
                             positions : np.ndarray, 
-                            cell : np.ndarray, elements : str) -> None :
+                            cell : np.ndarray, 
+                            elements : str) -> None :
     """Update method for dynamical matrix h5 files
     
     Parameters
@@ -68,7 +69,8 @@ class Data(TypedDict) :
     inputs_lammps : str
 
 class DataPhondy : 
-    def __init__(self, root_dir : os.PathLike[str]) -> None : 
+    def __init__(self, root_dir : os.PathLike[str],
+                 path_h5 : os.PathLike[str] = None) -> None : 
         """Init method for ```DataPhondy``` object 
         
         Parameters
@@ -81,7 +83,13 @@ class DataPhondy :
         """
         self.Data : Dict[str,Data] = {}
         self.root_dir = root_dir
-    
+        if path_h5 is not None : 
+            self.h5_file = h5py.File(path_h5, 'w')
+            # Create a group for potentials
+            self.dynamical_group = self.h5_file.create_group('dynamical')
+            print('... .h5 file and h5 group are directly generated ...')
+            print('... Use attribute ```dynamical_group``` to update .h5 file ...')
+
     def GenerateDataParallel(self, hdf5 : Group, njob : int = 1) -> None : 
         """Fill the hdf5 group parallely by reading binary files from phondy
         
@@ -213,7 +221,11 @@ class DataPhondy :
         atoms = self.change_all_symbols(atoms, 'Fe')
         inputs_lammps_file = self.read_inputs_lammps('{:s}/{:s}'.format(path,inputs_lammps))
         self.Data[os.path.dirname(path)] = {'atoms':atoms,'dynamical_matrix':dynamical_matrix,'inputs_lammps':inputs_lammps_file}
-        add_or_update_dynamical(hdf5, os.path.basename(path), dynamical_matrix, atoms.positions, atoms.cell[:], atoms.get_chemical_formula())
+        
+        dyn_group_name = os.path.basename(os.path.normpath(path))
+        if not dyn_group_name:
+           raise ValueError(f"Invalid path '{path}' – cannot derive a group name.")
+        add_or_update_dynamical(hdf5, dyn_group_name, dynamical_matrix, atoms.positions, atoms.cell[:], atoms.get_chemical_formula())
         return 
 
     def change_all_symbols(self, atoms : Atoms, symbol : str) -> Atoms : 
@@ -338,11 +350,11 @@ class DataPhondy :
         f = open(file, 'rb')
         if ext == 'm' : 
             dt_float = np.dtype('f8')
-            np.fromfile(f, dtype=dt_float, offset=4,count=1)
+            #np.fromfile(f, dtype=dt_float, offset=4,count=1)
             return np.fromfile(f, dtype=dt_float, offset=4,count=idx)
         if ext == 'u' or ext == 'v' :
             dt_int = np.dtype('i4')
-            np.fromfile(f, dtype=dt_int,count=1)
+            #np.fromfile(f, dtype=dt_int,count=1)
             return np.fromfile(f, dtype=dt_int,count=idx)
 
     def read_imax(self, file_m : os.PathLike[str]) -> int : 
@@ -361,7 +373,7 @@ class DataPhondy :
             Interger header
         """
         with open(file_m, 'rb') as file:
-            np.fromfile(file, dtype=np.int32, count=1)
+            #np.fromfile(file, dtype=np.int32, count=1)
             return np.fromfile(file, dtype=np.int32, count=1)[0]
 
     def read_phondy_matrix_multi_proc(self, path : str, njob : int = 1) -> np.ndarray :
@@ -398,10 +410,16 @@ class DataPhondy :
         array_u = np.array(matrix_u) - 1
         array_v = np.array(matrix_v) - 1
         array_m = np.array(matrix_m) 
+        #print(array_u, 'u')
+        #print(array_v, 'v')
+        #print(array_m, 'm')
+        #print(matrix_size)
+        #exit(0)
+
         dynamical_matrix[array_u,array_v] = array_m
-
+        #print(np.linalg.eigvals)
         #print(np.linalg.norm(dynamical_matrix.T - dynamical_matrix))
-
+        #print(np.linalg.eigh(dynamical_matrix, UPLO='U'))
         return dynamical_matrix
     
     def read_phondy_matrix_multi_proc_draft(self, path : str, njob : int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray] :  

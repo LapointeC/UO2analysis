@@ -1,14 +1,16 @@
 import sys
 import h5py
 
-sys.path.insert(0,'../../')
+#sys.path.insert(0,'../../')
+sys.path.insert(0,'/home/marinica/GitHub/UO2analysis.git/Src_detection')
 from Src import DataPhondy 
 
 ###########################
 ## INPUTS
 ###########################
-root_dir_ph = ''
-njob = 1
+root_dir_ph = '/home/marinica/Work_ML/AlexandreThese/UnseenToken/Fe/put_noise/sia_111'
+root_dir_ph = './'
+njob = 40
 h5_file_path = './dynamical.h5'
 ############################
 

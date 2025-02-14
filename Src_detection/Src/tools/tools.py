@@ -73,6 +73,7 @@ def RecursiveBuilder(root_dir_check : os.PathLike[str], file2find : str = 'OUTCA
     list_path_outcar = []
     RecursiveCheck(root_dir_check,list_path_outcar,file2find)
 
+
     return list_path_outcar
 
 
