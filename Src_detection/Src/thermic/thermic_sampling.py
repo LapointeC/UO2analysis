@@ -193,12 +193,17 @@ class AtomsAssembly :
             Type of extension for geometry files
 
         """
+        if extension == 'xyz' : 
+            extension_ase = 'extxyz'
+        else : 
+            extension_ase = extension
+
         for key, val in self.assembly.items() :
             print(f'... Writing .xyz for {key} config ...')
             for id, ats in enumerate(val) : 
                 write(f'{path_writing}/{key}_{id}.{extension}',
                       ats,
-                      format=extension)
+                      format=extension_ase)
         return 
 
 class ThermicSampling : 
@@ -288,22 +293,33 @@ class ThermicSampling :
         dict_dynamical_matrix : Dict[str, Dynamical] = {}
         with h5py.File(self.path_data,'r') as r :
             dynamical_group = r['dynamical']
-            for key, val in dynamical_group.items() :
-                cell = val['cell'][:]
-                positions = val['positions'][:,:]
+            try :
+                for key, val in dynamical_group.items() :
+                    cell = val['cell'][:]
+                    positions = val['positions'][:,:]
 
+                    if sym is None : 
+                        symbol = f'Fe{positions.shape[0]}'
+                    else : 
+                        symbol = sym
+
+                    dict_dynamical_matrix[key] = {'dynamical_matrix':val['dynamical_matrix'][:,:],
+                                                  'omega2':None,
+                                                  'xi_matrix':None,
+                                                  'atoms':Atoms(symbols=symbol,positions=positions,cell=cell,pbc=[True,True,True])}
+
+            except : 
+                cell = dynamical_group['cell'][:]
+                positions = dynamical_group['positions'][:,:]
                 if sym is None : 
                     symbol = f'Fe{positions.shape[0]}'
                 else : 
-                    symbol = sym
-                
-                dict_dynamical_matrix[key] = {'dynamical_matrix':val['dynamical_matrix'][:,:],
+                    symbol = sym               
+                dict_dynamical_matrix['dfct'] = {'dynamical_matrix':dynamical_group['dynamical_matrix'][:,:],
                                               'omega2':None,
                                               'xi_matrix':None,
                                               'atoms':Atoms(symbols=symbol,positions=positions,cell=cell,pbc=[True,True,True])}
 
-                if len(dict_dynamical_matrix) > 1 : 
-                    break
 
         return dict_dynamical_matrix
 

@@ -134,13 +134,25 @@ class NormDescriptorHistogram :
 ## MCD ANALYSIS OBJECT
 #######################################################
 class MetricAnalysisObject : 
-
+    """Generic analysis object to fit reference distance models
+    Reference models are stored in ```self.meta_model``` under ```MetaModel``` format
+    """
     def __init__(self, dbmodel : DBManager = None) -> None : 
+        """Init method for ```MetricAnalysisObject
+        
+        Parameters
+        ----------
+
+        dbmodel : ```DBManager```
+            ```DBManager``` object to perform analysis
+
+        """
         self.dic_class : Dict[str,Dict[str,List[Atoms]]] = {}
         self.meta_model = MetaModel()
         self.pca_model = PCAModel()
 
         def fill_dictionnary_fast(ats : Atoms, dic : Dict[str,List[Atoms]]) -> None : 
+            """Fast internal method to store ```Atoms``` objects"""
             symbols = ats.get_chemical_symbols()
             for sym in dic.keys() : 
                 mask_sym = list(map( lambda b : b == sym, symbols))
@@ -199,7 +211,23 @@ class MetricAnalysisObject :
         return list_atoms_species
 
     def _get_all_atoms_species_list(self, list_ats : List[Atoms], species : str) -> List[Atoms] : 
-        """Fast method to extract ```Atoms``` object with specific species from a given ```List[Atoms]``` """
+        """Fast method to extract ```Atoms``` object with specific species from a given ```List[Atoms]``` 
+        
+        Parameters
+        ----------
+
+        list_ats : List[Atoms]
+            List of ```Atoms``` to select only a given species
+
+        species : str
+            Species to select
+
+        Returns
+        -------
+
+        List[Atoms]
+            List of ```Atoms``` containing only species
+        """
         def fast_species(ats : Atoms, species : str) -> Atoms : 
             symbols = ats.get_chemical_symbols()
             mask_species = list(map( lambda b : b == species, symbols))
@@ -215,12 +243,30 @@ class MetricAnalysisObject :
                         nb_selected : int =10000,
                         contour : bool = False) -> None : 
         """Perform MCD analysis for a given species
-        species : str is the chemical symbol of the species to analyze e.g. 'U', 'O', 'Cu
-        name_model : str is the name of the model to store
-        list_atoms : List[Atoms] is the list of Atoms object to analyze
-        contamination : float is the contamination rate for the MCD analysis
-        nb_bin : int is the number of bin for the histogram
-        nb_selected : int is the number of selected atoms for the MCD analysis
+        
+        Parameters
+        ----------
+        
+        species : str 
+            Chemical symbol of the species to analyze e.g. 'U', 'O', 'Cu
+        
+        name_model : str 
+            Name of the model to store
+        
+        list_atoms : List[Atoms] 
+            List of Atoms object to analyze
+        
+        contamination : float 
+            Contamination rate for the MCD analysis
+        
+        nb_bin : int 
+            Number of bin for the histogram
+        
+        nb_selected : int 
+            Number of selected atoms for the MCD analysis
+
+        contour : bool
+            Boolean to draw out MCD center and level line
         """
         #TODO_cos the version list do not work ... WTF! 
         if list_atoms is None : 
@@ -229,11 +275,10 @@ class MetricAnalysisObject :
             list_atom_species = self._get_all_atoms_species_list(list_atoms, species)
         print()
         print('... Starting histogram procedure ...')
-        #debug_cos print('list_atom_species ', list_atom_species)
-        #debug_cos print('nb_bin', nb_bin)
+        
         histogram_norm_species = NormDescriptorHistogram(list_atom_species,nb_bin=nb_bin)
         array_desc_selected = histogram_norm_species.histogram_sample(nb_selected=nb_selected)
-        #debug_cos print(array_desc_selected.shape)
+        
         print('... Histogram selection is done ...')
         print()
 
@@ -243,7 +288,7 @@ class MetricAnalysisObject :
                                    'MCD', 
                                    species, 
                                    contamination=contamination)
-        #self._fit_mcd_model(list_atom_species, species, contamination=contamination)
+        
         print('... MCD envelop is fitted ...')
         updated_atoms = self.meta_model._get_statistical_distances(list_atom_species, 
                                                                    name_model, 
@@ -298,6 +343,7 @@ class MetricAnalysisObject :
                                linewidths=0.5,
                                alpha=0.5)
         
+        #contour
         if contour :
             triang = tri.Triangulation(desc_transform[:, 0], desc_transform[:, 1])
             axis[1].tricontour(triang, 
@@ -307,13 +353,13 @@ class MetricAnalysisObject :
                                linestyles='dashdot',
                                alpha=0.4)
 
-        # center 
-        desc_transform_center = self.add_centers_for_PCA('MCD',name_model,species).reshape(1,-1)
-        center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
-                                      c='red',
-                                      edgecolors='grey',
-                                      marker='D',
-                                      s=49)
+            # center 
+            desc_transform_center = self.add_centers_for_PCA('MCD',name_model,species).reshape(1,-1)
+            center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
+                                          c='red',
+                                          edgecolors='grey',
+                                          marker='D',
+                                          s=49)
 
         print('... PCA analysis is done ...'.format(species))
         axis[1].set_xlabel(r'First principal component for %s atoms'%(species))
@@ -333,12 +379,33 @@ class MetricAnalysisObject :
                         dict_gaussian : dict = {'n_components':2, 'max_iter':100,
                                                             'covariance_type':'full',
                                                             'init_params':'kmeans'}) -> None : 
-        """Perform MCD analysis for a given species
+        """Perform GMM analysis for a given species
         
-        TODO Same write doc 
+        Parameters
+        ----------
+        
+        species : str 
+            Chemical symbol of the species to analyze e.g. 'U', 'O', 'Cu
+        
+        name_model : str 
+            Name of the model to store
+        
+        list_atoms : List[Atoms] 
+            List of Atoms object to analyze
+        
+        nb_bin : int 
+            Number of bin for the histogram
+        
+        nb_selected : int 
+            Number of selected atoms for the MCD analysis
+        
+        contour : bool
+            Boolean to draw out GMM centers and level lines
+
+        dict_gaussian : dict    
+            Dictionnary containing options to perform GMM fiting (see default parameters list)
         """
 
-        #TODO_cos the version list do not work ... WTF!
         if list_atoms is None : 
             list_atom_species = self._get_all_atoms_species(species)
         else : 
@@ -412,13 +479,13 @@ class MetricAnalysisObject :
                                    linestyles='dashdot',
                                    alpha=0.4)
 
-        # center 
-        desc_transform_center = self.add_centers_for_PCA('GMM',name_model,species)
-        center_scat = axis[-1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
-                                      c='red',
-                                      edgecolors='grey',
-                                      marker='D',
-                                      s=49)
+            # center 
+            desc_transform_center = self.add_centers_for_PCA('GMM',name_model,species)
+            center_scat = axis[-1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
+                                          c='red',
+                                          edgecolors='grey',
+                                          marker='D',
+                                          s=49)
         print('... PCA analysis is done ...'.format(species))
         axis[-1].set_xlabel(r'First principal component for %s atoms'%(species))
         axis[-1].set_ylabel(r'Second principal component for %s atoms'%(species))
@@ -430,17 +497,44 @@ class MetricAnalysisObject :
         plt.savefig('{:s}_{:s}_gmm_analysis.png'.format(species,name_model),dpi=300)
 
     def get_gmm_distance(self, array_distance : np.ndarray) -> np.ndarray : 
+        """Fast internal method to have closest GMM distance
+        
+        Parameters
+        ----------
+
+        array_distance : np.ndarray
+            Draft distances from GMM
+
+        Returns
+        -------
+
+        np.ndarray
+            Closest GMM distances
+        """
         return np.array([np.amin(array_distance[k,:]) for k in range(array_distance.shape[0]) ])
 
     def fit_mahalanobis_envelop(self, species : str, 
                                 name_model : str,
                                 list_atoms : List[Atoms] = None,
                                 contour : bool = False) -> None : 
-        """Perform MCD analysis for a given species
+        """Perform Mahalanobis analysis for a given species
         
-        TODO write doc
+        Parameters
+        ----------
+        
+        species : str 
+            Chemical symbol of the species to analyze e.g. 'U', 'O', 'Cu
+        
+        name_model : str 
+            Name of the model to store
+        
+        list_atoms : List[Atoms] 
+            List of Atoms object to analyze
+        
+        contour : bool
+            Boolean to draw out GMM centers and level lines
+
         """
-        #TODO_cos the version list do not work ... 
         if list_atoms is None : 
             list_atom_species = self._get_all_atoms_species(species)
         else : 
@@ -492,15 +586,7 @@ class MetricAnalysisObject :
                                edgecolors='grey',
                                linewidths=0.5,
                                alpha=0.5)
-        
-        # center 
-        desc_transform_center = self.add_centers_for_PCA('MAHA',name_model,species).reshape(1,-1)
-        center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
-                                      c='red',
-                                      edgecolors='grey',
-                                      marker='D',
-                                      s=49)
-        
+             
         # contour
         if contour :
             triang = tri.Triangulation(desc_transform[:, 0], desc_transform[:, 1])
@@ -510,7 +596,14 @@ class MetricAnalysisObject :
                                levels=15,
                                linestyles='dashdot',
                                alpha=0.4)
-
+            # center 
+            desc_transform_center = self.add_centers_for_PCA('MAHA',name_model,species).reshape(1,-1)
+            center_scat = axis[1].scatter(desc_transform_center[:,0], desc_transform_center[:,1],
+                                          c='red',
+                                          edgecolors='grey',
+                                          marker='D',
+                                          s=49)
+   
         print('... PCA analysis is done ...'.format(species))
         axis[1].set_xlabel(r'First principal component for %s atoms'%(species))
         axis[1].set_ylabel(r'Second principal component for %s atoms'%(species))

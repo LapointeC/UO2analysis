@@ -410,16 +410,8 @@ class DataPhondy :
         array_u = np.array(matrix_u) - 1
         array_v = np.array(matrix_v) - 1
         array_m = np.array(matrix_m) 
-        #print(array_u, 'u')
-        #print(array_v, 'v')
-        #print(array_m, 'm')
-        #print(matrix_size)
-        #exit(0)
 
         dynamical_matrix[array_u,array_v] = array_m
-        #print(np.linalg.eigvals)
-        #print(np.linalg.norm(dynamical_matrix.T - dynamical_matrix))
-        #print(np.linalg.eigh(dynamical_matrix, UPLO='U'))
         return dynamical_matrix
     
     def read_phondy_matrix_multi_proc_draft(self, path : str, njob : int = 1) -> Tuple[np.ndarray, np.ndarray, np.ndarray] :  

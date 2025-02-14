@@ -19,8 +19,13 @@ from ovito.pipeline import StaticSource, Pipeline
 ## GENERAL DEFECT ANALYSIS OBJECT
 #######################################################
 class DfctMultiAnalysisObject : 
-    """TODO write doc"""
-    def __init__(self, dbmodel : DBManager = None, extended_properties : List[str] = None, **kwargs) -> None : 
+    """Generic analysis object to fit reference distance models
+    Reference models will be stored in ```self.meta_model``` under ```MetaModel``` format
+    Defect analysis will be stored in ```self.dfct``` which has the following structure:
+        - ```Dict[str, Dict[int, Cluster | ClusterDislo]]```
+    """
+    def __init__(self, dbmodel : DBManager = None, 
+                 extended_properties : List[str] = None, **kwargs) -> None : 
         self.dic_class : Dict[str,Dict[str,List[Atoms]]] = {}
         self.metamodel : MetaModel = MetaModel()
         self.pca_models : Dict[str,PCAModel] = {}
