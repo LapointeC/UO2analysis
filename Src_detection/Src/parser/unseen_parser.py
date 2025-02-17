@@ -250,7 +250,8 @@ class UNSEENConfigParser:
                 'storage_pickle': element.findtext('storage_pickle', default='./inference.pkl').strip(),
                 'species': element.findtext('species', default='Fe').strip().split(),
                 'md_format': element.findtext('md_format', default='cfg').strip(),
-                'id_atoms': self.parse_id_atoms(element.findtext('id_atoms', default='all'))
+                'id_atoms': self.parse_id_atoms(element.findtext('id_atoms', default='all')),
+                'milady_comput': True
             }
         except : 
             self.inference_config = {
@@ -259,7 +260,8 @@ class UNSEENConfigParser:
                 'storage_pickle': element.findtext('storage_pickle', default='./inference.pkl').strip(),
                 'species': element.findtext('species', default='Fe').strip().split(),
                 'md_format': element.findtext('md_format', default='cfg').strip(),
-                'selection_mask': self.parse_slice_atoms(element.findtext('selection_mask',default='[:]'))
+                'selection_mask': self.parse_slice_atoms(element.findtext('selection_mask',default='[:]')),
+                'milady_comput': True
             }  
 
         # Validate MD format
@@ -282,11 +284,20 @@ class UNSEENConfigParser:
         if not directory_path.is_dir():
             print(f"Inference path {directory_path} is not a directory")
             sys.exit(1)
-            
-        ref_pickle_file = f"{self.inference_config.get('name', 'infer')}_inf_data.pickle"
+        
+        if os.path.exists(element.findtext('path_pkl_hpc',default='./Nothing').strip()) :    
+            ref_pickle_file = element.findtext('path_pkl_hpc',default='./Nothing').strip()
+            print(f'Reading previous HPC pickle file : {ref_pickle_file}')
+            self.inference_config['milady_comput'] = False
+
+        else : 
+            print(f'No HPC pickle found')
+            ref_pickle_file = f"{self.inference_config.get('name', 'infer')}_inf_data.pickle"
+            print(f'Reading default inference pickle : {ref_pickle_file}')
+            self.inference_config['milady_comput'] = True
+
         #ref_pickle_model = f"{self.inference_config.get('name', 'infer')}_inf_model.pickle"
         self.inference_config['pickle_data'] = ref_pickle_file   
-        #self.inference_config['pickle_model'] = ref_pickle_model
         self.inference_config['path_metamodel_pkl'] = self.path_metamodel_pkl
 
     def parse_slice_atoms(self, text_slice : str) -> Tuple[slice] : 

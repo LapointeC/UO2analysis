@@ -1,0 +1,21 @@
+#!/bin/bash 
+#MSUB -q skylake
+#MSUB -r mld 
+#MSUB -n 24
+#SUB  -c 2
+#MSUB -T 20000 
+#MSUB -o file.o%J 
+#MSUB -e file.e%J 
+#MSUB -A dendmn 
+#MSUB -m work,scratch 
+suff=compute_descriptor
+module purge
+module load inteloneapi/23.2.0
+module load mkl/23.2.0
+module load scalapack/mkl/23.2.0
+module load mpi/openmpi/4.1.4
+module load gnu/13.2.0
+module load cmake/3.26.4
+module load python3/3.10.6
+
+python compute_descriptors.py 
