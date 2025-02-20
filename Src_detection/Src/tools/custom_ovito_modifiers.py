@@ -9,13 +9,16 @@ import matplotlib.pyplot as plt
 from matplotlib import colors
 
 from ovito.io.ase import ase_to_ovito
-from ovito.pipeline import PipelineSourceInterface
+from ovito.pipeline import PipelineSourceInterface, PythonSource, Pipeline
 from ovito.io import *
 from ovito.data import DataCollection
 from ovito.traits import Color
 from matplotlib.rcsetup import _validators
 from ovito.vis import ViewportOverlayInterface
 from traits.api import Bool, Code, Enum, Range
+from ovito.pipeline import ModifierInterface
+
+from ..metrics.meta_metrics import MetaModel
 
 ########################################################
 ## FRAME INTERFACE FOR OVITO
@@ -404,3 +407,115 @@ class LogisticModifier :
         mask = (logistic_score[:,1] > self.threshold)
         array_transparency[mask] = 1.0 - logistic_score[mask,1] 
         data.particles_.create_property('Transparency',data=array_transparency)
+
+class UnseenDict(TypedDict) : 
+    min_d : float
+    max_d : float
+
+
+#################################################
+#### GENERAN INTERACTIVE MODIFIER
+##################################################
+
+class InteractiveModifier(ModifierInterface) :
+    """Hello World"""
+    init_transparency = 0.9
+    color_map = plt.cm.get_cmap('viridis')
+    dict_color = None
+    raduis_at = 0.9    
+
+    def get_rgb(self, key : str, value : float) -> tuple[float, float, float] : 
+        """Get colors associated to a given scale value and a given key
+        
+        Parameters
+        ----------
+
+        key : str
+            Key associated to the colormap in colormap dictionnary
+
+        value : float
+            Scale value to convert into color
+
+        Returns
+        -------
+
+        tuple[float, float, float]
+            RGB tuple 
+        """
+        return colors.to_rgb(self.dict_color_map[key](value))
+    
+    def rebuild_dictionnary(self) -> dict : 
+        dic = {}
+        for key, val in self.__dict__.items(): 
+            name = key.split('-')[0]
+            otherside = key.split('-')[1]
+            if name not in dic.keys() : 
+                dic[name] = {otherside:val}
+            else : 
+                dic[name][otherside] = val
+   
+        return dic
+
+    def modify(self, data: DataCollection, *, frame: int, **kwargs) -> None : 
+        color_array = np.empty((len(data.particles_), 3))
+        color_array[:] = colors.to_rgb('grey')
+        array_transparency = np.full(data.particles_.shape[0], self.init_transparency)
+
+        dictionnary_distance = self.rebuild_dictionnary()
+        for key, sub_dict in dictionnary_distance.items(): 
+            if len(sub_dict) > 2 : 
+                d_key = data.particles_[f'gmm-distance-{key}'][:,:]
+                pass
+
+            else : 
+               d_key = data.particles_[f'distance-{key}'][:]
+               mask_d = (d_key > sub_dict['min_d']) & (d_key < sub_dict['max_d'])
+
+            # Apply conditions using boolean indexing
+            array_transparency[mask_d] = 0.2 #0.4 * (1.0 - normalized_mcd[mask])
+
+            try :
+                color_array[mask_d] = [self.color_map(d/np.amax(d_key)) for d in d_key[mask_d]]
+            except :
+                print(f'No defect {key}')
+
+        # Set default values for elements not meeting the condition
+        data.particles_.create_property('Transparency',data=array_transparency)
+        data.particles_.create_property('Color',data=color_array)
+        return 
+
+########################
+class ComputeInteractiveModifier : 
+    def __init__(self, 
+                 metamodel : MetaModel,
+                 list_atoms : List[Atoms]) -> None : 
+        
+        self.metamodel = metamodel
+        self.list_atoms = list_atoms
+        self.dic_kwargs = self.generate_dictionnary_kwargs(metamodel)
+
+    def generate_dictionnary_kwargs(self, metamodel : MetaModel) -> dict : 
+        kwargs = {}
+        for key, val in metamodel.meta_data.items() : 
+            if metamodel.meta_kind[key] == 'MCD' or metamodel.meta_kind[key] == 'MAHA' : 
+                kwargs[f'{key}-min_d'] = 1.0
+                kwargs[f'{key}-max_d'] = 2.0
+
+            elif metamodel.meta_kind[key] == 'GMM' :
+                for k in range(val['n_components']) : 
+                    kwargs[f'{key}-min_d{k}'] = 1.0
+                    kwargs[f'{key}-max_d{k}'] = 1.0
+
+        return kwargs 
+
+    def BuildOvitoPipeline(self) -> None : 
+        """Build the Interactive Pipeline to set tresholds"""
+        frame_obj = FrameOvito(self.list_atoms)
+        interactive_modifier = InteractiveModifier(**self.dic_kwargs)
+        
+        pipeline_config = Pipeline(source = PythonSource(delegate=frame_obj))
+        pipeline_config.modifiers.append(interactive_modifier)
+        for frame in range(pipeline_config.source.num_frames) :
+            data = pipeline_config.compute(frame)
+
+        pipeline_config.add_to_scene()

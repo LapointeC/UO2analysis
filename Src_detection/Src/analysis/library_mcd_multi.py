@@ -425,6 +425,7 @@ class MetricAnalysisObject :
                                    species,
                                    dict_gaussian=dict_gaussian)
 
+        self.meta_model._update_meta_data(name_model, {'n_components':dict_gaussian['n_components']})
         print('... GMM envelop is fitted ...')
         updated_atoms = self.meta_model._get_statistical_distances(list_atom_species,
                                                                    name_model,

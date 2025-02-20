@@ -1,7 +1,7 @@
 from .analysis import DfctMultiAnalysisObject, NormDescriptorHistogram, MetricAnalysisObject, ReferenceBuilder
 from .clusters import Cluster, ClusterDislo, DislocationObject
 from .mld import Milady, DBDictionnaryBuilder, GenerateMiladyInput, DBManager, Optimiser, Regressor, Descriptor, DescriptorsHybridation, write_milady_poscar
-from .tools import FrameOvito, NaiveOvitoModifier, MCDModifier, LogisticModifier, my_cfg_reader, timeit, DataPhondy, RecursiveCheck, RecursiveBuilder, nearest_mode, get_N_neighbour, build_extended_neigh_
+from .tools import FrameOvito, NaiveOvitoModifier, MCDModifier, LogisticModifier, my_cfg_reader, timeit, DataPhondy, RecursiveCheck, RecursiveBuilder, nearest_mode, get_N_neighbour, build_extended_neigh_, ComputeInteractiveModifier
 from .thermic import HarmonicThermicGenerator, ThermicSampling, ThermicFiting, FastEquivariantDescriptor
 from .metrics import PCA_, PCAModel, MCD, MCDModel, Logistic, LogisticRegressor, GMM, GMMModel, MetaModel
 from .parser import UNSEENConfigParser
