@@ -283,6 +283,8 @@ class InferenceBuilder:
 
                 # Save modified atoms with distances
                 output_path = os.path.join(output_dir, f"filled_{key_c}.xyz")
+                if "milady-descriptors" in atoms.arrays:
+                     del atoms.arrays["milady-descriptors"] 
                 atoms.write(output_path)
                 print(f"... .xyz file for {key_c} configuration is written ...")
                 print(f"... {output_path} ...")
