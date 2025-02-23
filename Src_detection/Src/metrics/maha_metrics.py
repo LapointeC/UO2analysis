@@ -50,6 +50,8 @@ class MahalanobisModel :
         self.models[species] = {'mean_vector':None,
                                 'covariance_matrix':None,
                                 'distribution':None}
+        print(desc_selected.shape)
+        exit(0) 
         
         mean_vector = desc_selected.mean(axis=0)
         desc_selected += - mean_vector
@@ -123,9 +125,15 @@ class MahalanobisModel :
             desc = atoms.get_array('milady-descriptors')
             #debug_cos ... I change that  
             #mcd_distance = np.sqrt( np.trace( ( desc - mean_vector )@inv_covariance@( desc.T - mean_vector ) ) )
-            # into that ... 
-            dist_matrix = ( desc - mean_vector.T )@inv_covariance@( desc.T - mean_vector )  
-            dist = np.diagonal(dist_matrix)
+            # into that ...
+             
+            #old dist_matrix = ( desc - mean_vector.T )@inv_covariance@( desc.T - mean_vector )  
+            #old dist = np.diagonal(dist_matrix)
+            
+            delta = desc - mean_vector.T 
+            temp  = delta @ inv_covariance   
+            dist = np.sum(temp * delta, axis=1)  # Avoid   MxM matrix 
+            
             mcd_distance = np.sign(dist) * np.sqrt(np.abs(dist))
             #debug_cos I replaced that ...
             #atoms.set_array(f'mahalanobis-distance-{self.name}',np.sqrt(mcd_distance), dtype=float)

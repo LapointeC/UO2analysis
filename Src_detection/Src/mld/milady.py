@@ -1579,6 +1579,7 @@ class ComputeDescriptor:
         
         # Commands for calling Milady and MPI.
         self.milady_command = '/home/lapointe/bin/milady_main.exe'
+        self.milady_command = '/home/marinica/MLD_GitHub/mld_build_mix/bin/milady_main.exe'
         self.mpi_command = 'mpirun -np'
     
     @staticmethod
@@ -1685,7 +1686,7 @@ class ComputeDescriptor:
                                      chemical_elements=self.chemical_elements,
                                      desc_forces=False)
         regressor = Regressor.ComputeDescriptors(write_design_matrix=False)
-        descriptor = Descriptor.BSO4(r_cut=5.0, j_max=4.0, lbso4_diag=False)
+        descriptor = Descriptor.BSO4(r_cut=5.5, j_max=4.0, lbso4_diag=False)
         
         # --- Step 4: Set environment variables for Milady ---
         os.environ['MILADY_COMMAND'] = self.milady_command

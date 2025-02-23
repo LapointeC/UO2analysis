@@ -18,7 +18,7 @@ from ovito.vis import ViewportOverlayInterface
 from traits.api import Bool, Code, Enum, Range
 from ovito.pipeline import ModifierInterface
 
-from ..metrics.meta_metrics import MetaModel
+#cdepom ..metrics.meta_metrics import MetaModel
 
 ########################################################
 ## FRAME INTERFACE FOR OVITO
@@ -484,38 +484,38 @@ class InteractiveModifier(ModifierInterface) :
         data.particles_.create_property('Color',data=color_array)
         return 
 
-########################
-class ComputeInteractiveModifier : 
-    def __init__(self, 
-                 metamodel : MetaModel,
-                 list_atoms : List[Atoms]) -> None : 
-        
-        self.metamodel = metamodel
-        self.list_atoms = list_atoms
-        self.dic_kwargs = self.generate_dictionnary_kwargs(metamodel)
-
-    def generate_dictionnary_kwargs(self, metamodel : MetaModel) -> dict : 
-        kwargs = {}
-        for key, val in metamodel.meta_data.items() : 
-            if metamodel.meta_kind[key] == 'MCD' or metamodel.meta_kind[key] == 'MAHA' : 
-                kwargs[f'{key}-min_d'] = 1.0
-                kwargs[f'{key}-max_d'] = 2.0
-
-            elif metamodel.meta_kind[key] == 'GMM' :
-                for k in range(val['n_components']) : 
-                    kwargs[f'{key}-min_d{k}'] = 1.0
-                    kwargs[f'{key}-max_d{k}'] = 1.0
-
-        return kwargs 
-
-    def BuildOvitoPipeline(self) -> None : 
-        """Build the Interactive Pipeline to set tresholds"""
-        frame_obj = FrameOvito(self.list_atoms)
-        interactive_modifier = InteractiveModifier(**self.dic_kwargs)
-        
-        pipeline_config = Pipeline(source = PythonSource(delegate=frame_obj))
-        pipeline_config.modifiers.append(interactive_modifier)
-        for frame in range(pipeline_config.source.num_frames) :
-            data = pipeline_config.compute(frame)
-
-        pipeline_config.add_to_scene()
+#########################
+#class ComputeInteractiveModifier : 
+#    def __init__(self, 
+#                 metamodel : MetaModel,
+#                 list_atoms : List[Atoms]) -> None : 
+#        
+#        self.metamodel = metamodel
+#        self.list_atoms = list_atoms
+#        self.dic_kwargs = self.generate_dictionnary_kwargs(metamodel)
+#
+#    def generate_dictionnary_kwargs(self, metamodel : MetaModel) -> dict : 
+#        kwargs = {}
+#        for key, val in metamodel.meta_data.items() : 
+#            if metamodel.meta_kind[key] == 'MCD' or metamodel.meta_kind[key] == 'MAHA' : 
+#                kwargs[f'{key}-min_d'] = 1.0
+#                kwargs[f'{key}-max_d'] = 2.0
+#
+#            elif metamodel.meta_kind[key] == 'GMM' :
+#                for k in range(val['n_components']) : 
+#                    kwargs[f'{key}-min_d{k}'] = 1.0
+#                    kwargs[f'{key}-max_d{k}'] = 1.0
+#
+#        return kwargs 
+#
+#    def BuildOvitoPipeline(self) -> None : 
+#        """Build the Interactive Pipeline to set tresholds"""
+#        frame_obj = FrameOvito(self.list_atoms)
+#        interactive_modifier = InteractiveModifier(**self.dic_kwargs)
+#        
+#        pipeline_config = Pipeline(source = PythonSource(delegate=frame_obj))
+#        pipeline_config.modifiers.append(interactive_modifier)
+#        for frame in range(pipeline_config.source.num_frames) :
+#            data = pipeline_config.compute(frame)
+#
+#        pipeline_config.add_to_scene()

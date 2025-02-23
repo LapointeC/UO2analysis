@@ -249,8 +249,11 @@ class InferenceBuilder:
         
         file_data_pickle = self.infer_config['directory']
         storage_pickle_data = self.infer_config['storage_pickle']
-
+        print(f"... Reading previous pickle file : {file_data_pickle} ...")
+        print(f"... Storing new pickle file : {storage_pickle_data} ...")
+        
         where_is_pkl = os.path.join(os.path.dirname(file_data_pickle),f"{self.infer_config['name']}_inf_data.pickle")
+        print(f"... Reading previous pickle file : {where_is_pkl} ...")
         
         # Read previous pickle file
         previous_dbmodel : DBManager = pickle.load(open(where_is_pkl,'rb'))
@@ -286,8 +289,8 @@ class InferenceBuilder:
                 if "milady-descriptors" in atoms.arrays:
                      del atoms.arrays["milady-descriptors"] 
                 atoms.write(output_path)
-                print(f"... .xyz file for {key_c} configuration is written ...")
-                print(f"... {output_path} ...")
+                print(f"       .xyz file for {key_c} configuration is written ...")
+                print(f"       {output_path} ...")
                 print()
 
                 self.dict_data.model_init_dic[key_c]['atoms'] = tmp_atoms[0]
@@ -304,10 +307,10 @@ class InferenceBuilder:
                        name : str,
                        atoms_list: List[Atoms]) -> List[Atoms]:
         """Process inference for a specific model type"""
-        print(f"    Processing {name}/{model_type} inference")
         
         # Get statistical distances
         for s in self.infer_config.get('species',['Fe']) :
+            print(f"       processing {name}/{model_type} inference for {s}")
             atoms_list = self.metamodel._get_statistical_distances(
                 atoms_list,
                 name,

@@ -10,6 +10,9 @@ from Src.parser.unseen_parser import UNSEENConfigParser
 from Src.analysis.reference import ReferenceBuilder, InferenceBuilder
 from Src.mld.milady import ComputeDescriptor
 
+from SrcMld import DBManager, DBDictionnaryBuilder, \
+                  Optimiser, Regressor, Descriptor, Milady, DescriptorsHybridation
+
 
 def split_path(path: str) -> tuple[str, str]:
     # If the path normalizes to '.', return './' for both directory and base name.
@@ -94,9 +97,9 @@ if __name__ == "__main__":
     #put current directory into some variable: 
     cdir = os.getcwd()
     
-    milady_compute = False
+    milady_compute = True
     unseen_train = True
-    unseen_inference = True
+    unseen_inference = False
     
     if auto_config:
         # Get the MD files directory, MD file format, and a name for the pickle file
@@ -177,34 +180,35 @@ if __name__ == "__main__":
         inference_config = custom_parser.inference_config
         print_config("Inference Configuration", inference_config)
     
-        #if inference_config['milady_comput'] :
-        #
-        #    # Extract parameters for inference
-        #    inf_directory = inference_config.get('directory', './')
-        #    inf_dir_name = inference_config['directory_name']
-        #    inf_dir_where = inference_config['directory_path']
-        #    #inf_dir_where, inf_dir_name = split_path(inf_directory)
-        #    inf_md_format = inference_config.get('md_format', 'cfg')
-        #    # Create a pickle file name for the inference configuration:
-        #    inf_pickle_file = f"{inference_config.get('name', 'inference')}_inf_data.pickle"
-        #    print_fancy_header(f"Running descriptor computation for Inference: {inference_config.get('name', 'inference')}")
-        #    print(f"Directory: {inf_directory}")
-        #    print(f"MD file format: {inf_md_format}")
-        #    print(f"Output pickle file: {inf_pickle_file}\n")
-        #    
-        #    # Change to the parent directory of the inference directory
-        #    os.chdir(inf_dir_where)
-        #    cd_inference = ComputeDescriptor(
-        #        path_bulk=inf_dir_name,
-        #        pickle_data_file=inf_pickle_file,
-        #        md_format=inf_md_format
-        #    )
-        #    cd_inference.compute()
-        #    os.chdir(cdir)    
-        #else : 
-        #    print(f'Directly reading HPC pkl file : {inference_config['pickle_data']}')
+        inference_config['milady_comput'] = False
+        if inference_config['milady_comput'] :
         
-        print(f'Directly reading HPC pkl file : {inference_config}')
+            # Extract parameters for inference
+            inf_directory = inference_config.get('directory', './')
+            inf_dir_name = inference_config['directory_name']
+            inf_dir_where = inference_config['directory_path']
+            #inf_dir_where, inf_dir_name = split_path(inf_directory)
+            inf_md_format = inference_config.get('md_format', 'cfg')
+            # Create a pickle file name for the inference configuration:
+            inf_pickle_file = f"{inference_config.get('name', 'inference')}_inf_data.pickle"
+            print_fancy_header(f"Running descriptor computation for Inference: {inference_config.get('name', 'inference')}")
+            print(f"Directory: {inf_directory}")
+            print(f"MD file format: {inf_md_format}")
+            print(f"Output pickle file: {inf_pickle_file}\n")
+            
+            # Change to the parent directory of the inference directory
+            os.chdir(inf_dir_where)
+            cd_inference = ComputeDescriptor(
+                path_bulk=inf_dir_name,
+                pickle_data_file=inf_pickle_file,
+                md_format=inf_md_format
+            )
+            cd_inference.compute()
+            os.chdir(cdir)    
+        else : 
+            print(f'Directly reading HPC pkl file : {inference_config['pickle_data']}')
+        
+        #print(f'Directly reading HPC pkl file : {inference_config}')
 
         #try: 
         inference = InferenceBuilder(inference_config=inference_config, 
