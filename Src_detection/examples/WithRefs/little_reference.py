@@ -99,7 +99,7 @@ if __name__ == "__main__":
     
     milady_compute = True
     unseen_train = True
-    unseen_inference = False
+    unseen_inference = True
     
     if auto_config:
         # Get the MD files directory, MD file format, and a name for the pickle file
@@ -206,7 +206,8 @@ if __name__ == "__main__":
             cd_inference.compute()
             os.chdir(cdir)    
         else : 
-            print(f'Directly reading HPC pkl file : {inference_config['pickle_data']}')
+           #print(f'Directly reading HPC pkl file : {inference_config['pickle_data']}')
+           print(f'Directly reading HPC pkl file : {inference_config}')
         
         #print(f'Directly reading HPC pkl file : {inference_config}')
 

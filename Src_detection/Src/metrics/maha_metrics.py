@@ -50,8 +50,7 @@ class MahalanobisModel :
         self.models[species] = {'mean_vector':None,
                                 'covariance_matrix':None,
                                 'distribution':None}
-        print(desc_selected.shape)
-        exit(0) 
+
         
         mean_vector = desc_selected.mean(axis=0)
         desc_selected += - mean_vector
