@@ -18,7 +18,7 @@ from ovito.vis import ViewportOverlayInterface
 from traits.api import Bool, Code, Enum, Range
 from ovito.pipeline import ModifierInterface
 
-#cdepom ..metrics.meta_metrics import MetaModel
+from ..metrics.meta_metrics import MetaModel
 
 ########################################################
 ## FRAME INTERFACE FOR OVITO
@@ -408,14 +408,15 @@ class LogisticModifier :
         array_transparency[mask] = 1.0 - logistic_score[mask,1] 
         data.particles_.create_property('Transparency',data=array_transparency)
 
-class UnseenDict(TypedDict) : 
-    min_d : float
-    max_d : float
-
 
 #################################################
-#### GENERAN INTERACTIVE MODIFIER
+#### INTERACTIVE MODIFIER
 ##################################################
+
+class UnseenDict(TypedDict) : 
+    """Little class for ```InteractiveModifier```"""
+    min_d : float
+    max_d : float
 
 class InteractiveModifier(ModifierInterface) :
     """Hello World"""
@@ -445,6 +446,7 @@ class InteractiveModifier(ModifierInterface) :
         return colors.to_rgb(self.dict_color_map[key](value))
     
     def rebuild_dictionnary(self) -> dict : 
+        """Rebuild the initial distance dictionnary from **kwargs dictionnary"""
         dic = {}
         for key, val in self.__dict__.items(): 
             name = key.split('-')[0]
@@ -457,6 +459,7 @@ class InteractiveModifier(ModifierInterface) :
         return dic
 
     def modify(self, data: DataCollection, *, frame: int, **kwargs) -> None : 
+        """Modify method for ```Ovito``` interface (see modify doc)"""
         color_array = np.empty((len(data.particles_), 3))
         color_array[:] = colors.to_rgb('grey')
         array_transparency = np.full(data.particles_.shape[0], self.init_transparency)
@@ -484,38 +487,66 @@ class InteractiveModifier(ModifierInterface) :
         data.particles_.create_property('Color',data=color_array)
         return 
 
-#########################
-#class ComputeInteractiveModifier : 
-#    def __init__(self, 
-#                 metamodel : MetaModel,
-#                 list_atoms : List[Atoms]) -> None : 
-#        
-#        self.metamodel = metamodel
-#        self.list_atoms = list_atoms
-#        self.dic_kwargs = self.generate_dictionnary_kwargs(metamodel)
-#
-#    def generate_dictionnary_kwargs(self, metamodel : MetaModel) -> dict : 
-#        kwargs = {}
-#        for key, val in metamodel.meta_data.items() : 
-#            if metamodel.meta_kind[key] == 'MCD' or metamodel.meta_kind[key] == 'MAHA' : 
-#                kwargs[f'{key}-min_d'] = 1.0
-#                kwargs[f'{key}-max_d'] = 2.0
-#
-#            elif metamodel.meta_kind[key] == 'GMM' :
-#                for k in range(val['n_components']) : 
-#                    kwargs[f'{key}-min_d{k}'] = 1.0
-#                    kwargs[f'{key}-max_d{k}'] = 1.0
-#
-#        return kwargs 
-#
-#    def BuildOvitoPipeline(self) -> None : 
-#        """Build the Interactive Pipeline to set tresholds"""
-#        frame_obj = FrameOvito(self.list_atoms)
-#        interactive_modifier = InteractiveModifier(**self.dic_kwargs)
-#        
-#        pipeline_config = Pipeline(source = PythonSource(delegate=frame_obj))
-#        pipeline_config.modifiers.append(interactive_modifier)
-#        for frame in range(pipeline_config.source.num_frames) :
-#            data = pipeline_config.compute(frame)
-#
-#        pipeline_config.add_to_scene()
+########################
+class ComputeInteractiveModifier : 
+    """Head class for ```Ovito``` interactive interface
+    This class will generate scale bars for all distances contain in ```Atoms``` object
+    """
+    def __init__(self, 
+                 metamodel : MetaModel,
+                 list_atoms : List[Atoms]) -> None : 
+        """Init method for ```ComputeInteractiveModifier```
+        
+        Parameters
+        ----------
+
+        metamodel : ```MetaModel```
+            ```MetaModel``` object associated to distances stored in ```Atoms``` object 
+
+        list_atoms : List[Atoms]
+            List of ```Atoms``` object to analyse in interactive interface
+          
+        """
+        self.metamodel = metamodel
+        self.list_atoms = list_atoms
+        self.dic_kwargs = self.generate_dictionnary_kwargs(metamodel)
+
+    def generate_dictionnary_kwargs(self, metamodel : MetaModel) -> dict : 
+        """Generate **kwargs dictionnary needed to initialise ```InteractiveModifier``` class
+        
+        Parameters
+        ----------
+
+        metamodel : ```MetaModel```
+            ```MetaModel``` object associated to distances stored in ```Atoms``` object 
+        
+        Returns
+        -------
+
+        dict 
+            Dictionnary containig keys : ref_i-min_d, ref_i-max_d for all i in reference computed in ```MetaModel```
+        """
+        kwargs = {}
+        for key, val in metamodel.meta_data.items() : 
+            if metamodel.meta_kind[key] == 'MCD' or metamodel.meta_kind[key] == 'MAHA' : 
+                kwargs[f'{key}-min_d'] = 1.0
+                kwargs[f'{key}-max_d'] = 2.0
+
+            elif metamodel.meta_kind[key] == 'GMM' :
+                for k in range(val['n_components']) : 
+                    kwargs[f'{key}-min_d{k}'] = 1.0
+                    kwargs[f'{key}-max_d{k}'] = 2.0
+
+        return kwargs 
+
+    def BuildOvitoPipeline(self) -> None : 
+        """Build the Interactive Pipeline to set tresholds"""
+        frame_obj = FrameOvito(self.list_atoms)
+        interactive_modifier = InteractiveModifier(**self.dic_kwargs)
+        
+        pipeline_config = Pipeline(source = PythonSource(delegate=frame_obj))
+        pipeline_config.modifiers.append(interactive_modifier)
+        for frame in range(pipeline_config.source.num_frames) :
+            data = pipeline_config.compute(frame)
+
+        pipeline_config.add_to_scene()
