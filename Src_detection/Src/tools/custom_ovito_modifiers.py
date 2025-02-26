@@ -419,7 +419,9 @@ class UnseenDict(TypedDict) :
     max_d : float
 
 class InteractiveModifier(ModifierInterface) :
-    """Hello World"""
+    """Interactive modifier used to build distance scale bars in ```Ovito``` interface
+    All distances have to be intialised by passing dictionnary as **kwargs to this class
+    """
     init_transparency = 0.9
     color_map = plt.cm.get_cmap('viridis')
     dict_color = None
