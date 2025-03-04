@@ -1,0 +1,18 @@
+<SurfaceBuilder>
+	<PathBulk>/home/lapointe/ToSave/Work_ML/Heusler/surface_builder/inputs/bulk_CeRuSn.POSCAR</PathBulk>
+
+	<Levels>3</Levels>
+
+	<CheckSym>
+		<bool>True</bool>
+		<replica>3</replica>
+		<rcut>5.0</rcut>
+	</CheckSym>
+
+    	<hklVectors> 
+			<v>1 0 0</v>
+			<v>0 0 1</v>
+	</hklVectors>	
+
+	<WritingSlabs>/home/lapointe/WorkML/Unseen_dev/surfacebuilder/inputs/slabs</WritingSlabs>
+</SurfaceBuilder>
