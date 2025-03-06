@@ -1,8 +1,33 @@
 import os
+import pickle
 from difflib import SequenceMatcher
 from typing import List
 
-from ..surface_energy.DataSurfaceObject import DataSurface
+from ..surface_energy.DataSurfaceObject import DataSurface, dic_type
+
+def ReadStoragePkl(path_pkl : os.PathLike[str],
+                   object : DataSurface) -> DataSurface :
+    """Read directly all data from pickle file
+    
+    Parameters 
+    ----------
+
+    path_pkl : os.PathLike[str]
+        Path to the pickle file 
+
+    object : ```DataSurface```
+        ```DataSurface``` to update
+
+    Returns 
+    -------
+
+    ```DataSurface```
+        Updated ```DataSurface```
+
+    """ 
+    stored_data : dic_type = pickle.load(open(path_pkl,'rb'))
+    object.dic = stored_data
+    return object
 
 def ReadConvergenceFile(path_convergence_file : os.PathLike[str], 
                         object : DataSurface) -> DataSurface :
