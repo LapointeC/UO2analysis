@@ -3,8 +3,6 @@ import pickle
 import numpy as np
 from sklearn.neighbors import KernelDensity
 
-from ..tools import timeit
-
 from ase import Atoms
 from typing import TypedDict, List, Dict
 
@@ -50,8 +48,7 @@ class MahalanobisModel :
         self.models[species] = {'mean_vector':None,
                                 'covariance_matrix':None,
                                 'distribution':None}
-
-        print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!desc_seleted.shape : {desc_selected.shape}")
+        
         mean_vector = desc_selected.mean(axis=0)
         desc_selected += - mean_vector
         cov_desc = np.cov(desc_selected.T)
@@ -122,21 +119,13 @@ class MahalanobisModel :
             mean_vector = self.models[species]['mean_vector']
             inv_covariance = self.models[species]['inv_covariance_matrix']
             desc = atoms.get_array('milady-descriptors')
-            #debug_cos ... I change that  
-            #mcd_distance = np.sqrt( np.trace( ( desc - mean_vector )@inv_covariance@( desc.T - mean_vector ) ) )
-            # into that ...
-             
-            #old dist_matrix = ( desc - mean_vector.T )@inv_covariance@( desc.T - mean_vector )  
-            #old dist = np.diagonal(dist_matrix)
-            
+
             delta = desc - mean_vector.T 
             temp  = delta @ inv_covariance   
             dist = np.sum(temp * delta, axis=1)  # Avoid   MxM matrix 
             
             mcd_distance = np.sign(dist) * np.sqrt(np.abs(dist))
-            #debug_cos I replaced that ...
-            #atoms.set_array(f'mahalanobis-distance-{self.name}',np.sqrt(mcd_distance), dtype=float)
-            #debug_cos into that ...
+
             atoms.set_array(f'maha-distance-{self.name}',mcd_distance, dtype=float)
 
         [local_setting_mahalanobis(atoms) for atoms in list_atoms]

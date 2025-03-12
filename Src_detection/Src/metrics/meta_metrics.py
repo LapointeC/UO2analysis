@@ -6,8 +6,6 @@ from .gmm_metrics import GMM, GMMModel
 from .maha_metrics import Mahalanobis, MahalanobisModel
 from .mcd_metrics import MCD, MCDModel
 
-from ..tools import timeit
-
 from ase import Atoms
 from typing import List, Dict, Any
 

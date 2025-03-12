@@ -157,40 +157,20 @@ class GMMModel :
             if len(invcov_gmm.shape) < 3 :
                 invcov_gmm = np.array([ np.diag(invcov_gmm[i,:]) for i in range(invcov_gmm.shape[0]) ])
 
-            #print('shape  ', array_distance.shape)
-            #print('inccov  ', invcov_gmm.shape)
-            #print('mean  ', mean_gmm.shape)
             for i in range(array_distance.shape[1]):
-                #print('X', X.shape)
-                #print('mean', mean_gmm.shape)
-                #print('invcov', invcov_gmm.shape)
-                #print('X', X[0,0])
-                #print('mean', mean_gmm[i,0])
-                #print('invcov', invcov_gmm[i,0,0])    
-                
                 delta = X - mean_gmm[i, :]           # Shape: (M, D)
                 temp  = delta @ invcov_gmm[i, :, :]  # Shape: (M, D)
                 dist = np.sum(temp * delta, axis=1)  # Avoid   MxM matrix 
                 array_distance[:, i] = np.sign(dist) * np.sqrt(np.abs(dist))
-                #old array_distance[:,i] = np.diag(((X-mean_gmm[i,:])@invcov_gmm[i,:,:])@(X-mean_gmm[i,:]).T)
-                #old array_distance[:,i] = np.where(array_distance[:,i] <= 0.0, 0.0, np.sqrt(array_distance[:,i]))
+   
             return array_distance
 
         def local_setting_gmm(atoms : Atoms) -> None : 
-            #ttarray = atoms.get_array('milady-descriptors')
-            #print('  ttarray', ttarray.shape)
-            #print(self.models[species]['gmm'])
-            #gmm_distance = mahalanobis_gmm(self.models[species]['gmm'],ttarray) 
             gmm_distance = mahalanobis_gmm(self.models[species]['gmm'],atoms.get_array('milady-descriptors')) 
-            #print('  gmm_distance', gmm_distance)
             atoms.set_array(f'gmm-distance-{self.name}',gmm_distance, dtype=float)
 
-        #results = []        
-        #for atoms in list_atoms:
-        #    result = local_setting_gmm(atoms)
-        #    results.append(result)
         [local_setting_gmm(atoms) for atoms in list_atoms]
-         
+
         return list_atoms
 
     def mahalanobis_gmm(self, species : str, X : np.ndarray) -> np.ndarray : 

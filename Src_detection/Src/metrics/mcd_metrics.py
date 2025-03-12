@@ -4,8 +4,6 @@ import numpy as np
 from sklearn.covariance import MinCovDet
 from sklearn.neighbors import KernelDensity
 
-from ..tools import timeit
-
 from ase import Atoms
 from typing import TypedDict, List, Dict
 

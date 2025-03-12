@@ -10,7 +10,7 @@ from Src.parser.unseen_parser import UNSEENConfigParser
 from Src.analysis.reference import ReferenceBuilder, InferenceBuilder
 from Src.mld.milady import ComputeDescriptor
 
-from SrcMld import DBManager, DBDictionnaryBuilder, \
+from Src import DBManager, DBDictionnaryBuilder, \
                   Optimiser, Regressor, Descriptor, Milady, DescriptorsHybridation
 
 

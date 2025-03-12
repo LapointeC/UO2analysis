@@ -254,7 +254,7 @@ class InferenceBuilder:
         
         where_is_pkl = os.path.join(os.path.dirname(file_data_pickle),f"{self.infer_config['name']}_inf_data.pickle")
         print(f"... Reading previous pickle file : {where_is_pkl} ...")
-        
+
         # Read previous pickle file
         previous_dbmodel : DBManager = pickle.load(open(where_is_pkl,'rb'))
         configuration = previous_dbmodel.model_init_dic
@@ -286,8 +286,11 @@ class InferenceBuilder:
 
                 # Save modified atoms with distances
                 output_path = os.path.join(output_dir, f"filled_{key_c}.xyz")
+                
+                # delete descriptors in Atoms
                 if "milady-descriptors" in atoms.arrays:
-                     del atoms.arrays["milady-descriptors"] 
+                    del atoms.arrays["milady-descriptors"] 
+                
                 atoms.write(output_path)
                 print(f"       .xyz file for {key_c} configuration is written ...")
                 print(f"       {output_path} ...")
