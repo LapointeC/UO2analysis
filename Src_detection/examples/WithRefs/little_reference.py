@@ -97,8 +97,8 @@ if __name__ == "__main__":
     #put current directory into some variable: 
     cdir = os.getcwd()
     
-    milady_compute = True
-    unseen_train = True
+    milady_compute = False
+    unseen_train = False
     unseen_inference = True
     
     if auto_config:

@@ -1,21 +1,37 @@
 #!/bin/bash 
-#MSUB -q skylake
+#MSUB -q rome
 #MSUB -r mld 
-#MSUB -n 24
-#SUB  -c 2
-#MSUB -T 20000 
+#MSUB -n 200
+#MSUB  -c 4
+#MSUB -T 10000
 #MSUB -o file.o%J 
 #MSUB -e file.e%J 
 #MSUB -A dendmn 
 #MSUB -m work,scratch 
 suff=compute_descriptor
+
+
+
 module purge
+#module load vasp/6.4.0
 module load inteloneapi/23.2.0
 module load mkl/23.2.0
 module load scalapack/mkl/23.2.0
 module load mpi/openmpi/4.1.4
 module load gnu/13.2.0
 module load cmake/3.26.4
-module load python3/3.10.6
+module load gnuplot
+module load datadir/gen6821
+module load python3/default
 
-python compute_descriptors.py 
+export OPENMPI=/ccc/products/openmpi-4.1.4/intel--20.0.0/default/
+
+#export OMPI_FC=ifx
+export OMPI_FC=ifort
+#export OMPI_CC=icc
+#gnu  package
+export OMPI_CXX=g++
+export OMPI_CC=gcc
+
+
+python compute_descriptors.py > out_compute_desc

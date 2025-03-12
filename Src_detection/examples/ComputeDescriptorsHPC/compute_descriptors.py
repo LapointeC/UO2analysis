@@ -14,11 +14,16 @@ from SrcMld import DBManager, DBDictionnaryBuilder, \
 ## INPUTS
 #####################################
 # path
-path_config = 'path/to/configuration'
-pickle_file = 'path/to/pkl'
+path_config = os.path.expandvars('./vasp_poscars')
+pickle_file = os.path.expandvars('./feFPA.pkl')
+#pickle_file = 'path/to/pkl'
+
+path_config = os.path.abspath(path_config)
+pickel_file = os.path.abspath(pickle_file)
+
 
 # format
-format = 'xyz'
+format = 'poscar'
 
 #ml 
 species = 'Fe'
@@ -31,6 +36,10 @@ hybridation = False
 os.environ['MILADY_COMMAND'] = 'path/to/milady.exe'
 os.environ['MPI_COMMAND'] = 'ccc_mprun'
 ######################################
+
+
+def natural_sort_key(s):
+    return [int(text) if text.isdigit() else text for text in re.split(r'(\d+)', s)]
 
 def change_species(atoms: Atoms, species: List[str]) -> Atoms:
     """
@@ -55,10 +64,21 @@ def change_species(atoms: Atoms, species: List[str]) -> Atoms:
 print("Initializing DB Dictionary Builder ...")
 db_dic_builder = DBDictionnaryBuilder()
 
+#old # Build the file pattern using the given directory and file extension.
+#old pattern = os.path.join(path_config, '**', f'*.{format}')
+#old md_list = glob.glob(pattern, recursive=True)
+
 # Build the file pattern using the given directory and file extension.
 pattern = os.path.join(path_config, '**', f'*.{format}')
+
+# Get the list of files
 md_list = glob.glob(pattern, recursive=True)
 
+# Sort the files naturally
+files = sorted(md_list, key=natural_sort_key)
+md_list = files
+
+print(md_list)
 print(f"... Loading {len(md_list):4d} configuration files for descriptors calculation ...")
  
 # Define the allowed file extensions and a mapping to ASE read formats.
@@ -100,10 +120,10 @@ optimiser = Optimiser.Milady(fix_no_of_elements=1,
                              chemical_elements=['Fe'],
                              desc_forces=False)
 regressor = Regressor.ComputeDescriptors(write_design_matrix=False)
-descriptor_bso4 = Descriptor.BSO4(r_cut=6.0,j_max=5.0,lbso4_diag=False)
+descriptor_bso4 = Descriptor.BSO4(r_cut=5.0,j_max=4.0,lbso4_diag=False)
 
 if hybridation :
-    descriptor_k2b = Descriptor.Kernel2Body(r_cut=6.0,
+    descriptor_k2b = Descriptor.Kernel2Body(r_cut=5.0,
                                            sigma_2b=0.5,
                                            delta_2b=1.0,
                                            np_radial_2b=50)

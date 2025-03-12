@@ -51,7 +51,7 @@ class MahalanobisModel :
                                 'covariance_matrix':None,
                                 'distribution':None}
 
-        
+        print(f"!!!!!!!!!!!!!!!!!!!!!!!!!!desc_seleted.shape : {desc_selected.shape}")
         mean_vector = desc_selected.mean(axis=0)
         desc_selected += - mean_vector
         cov_desc = np.cov(desc_selected.T)
