@@ -16,6 +16,10 @@ class UNSEENConfigParser:
         self.custom_config: List[Dict[str, Any]] = []
         self.inference_config: Dict[str, Any] = {}
         
+        self.milady_compute = True
+        self.unseen_train = True
+        self.unseen_inference = False
+
         if os.path.exists(xml_path):
             print(xml_path)
             self.tree = ET.parse(xml_path)
@@ -77,6 +81,7 @@ class UNSEENConfigParser:
             elif child.tag == 'Custom':
                 self.parse_custom(child)
             elif child.tag == 'Inference':
+                self.inference_config = True
                 self.parse_inference(child)
 
     def set_metamodel_path(self, element : ET.Element) -> None :
@@ -162,11 +167,16 @@ class UNSEENConfigParser:
 
     def parse_custom(self, element: ET.Element) -> None:
         """Parse <Custom> configuration containing multiple <Reference> entries"""
+        # reading setting for reference 
+        for set_elem in element.findall('UnseenCalculation') : 
+            self.milady_compute = self.boolean_converter(set_elem.findtext('milady_compute', default='True').strip())
+            self.unseen_train = self.boolean_converter(set_elem.findtext('unseen_train', default='True').strip())
 
         for ref_elem in element.findall('Reference'):
             ref: Dict[str, Any] = {}
             ref['name'] = ref_elem.findtext('name', default='ref_01').strip()
             ref['directory'] = ref_elem.findtext('directory', default='./References').strip()
+
             # Convert to a pathlib object
             
             # Remove any trailing slashes (unless the path is just '/' itself)
@@ -251,7 +261,7 @@ class UNSEENConfigParser:
                 'species': element.findtext('species', default='Fe').strip().split(),
                 'md_format': element.findtext('md_format', default='cfg').strip(),
                 'id_atoms': self.parse_id_atoms(element.findtext('id_atoms', default='all')),
-                'milady_comput': True
+                'milady_compute': self.boolean_converter(element.findtext('milady_compute', default='False').strip())
             }
         except : 
             self.inference_config = {
@@ -261,7 +271,7 @@ class UNSEENConfigParser:
                 'species': element.findtext('species', default='Fe').strip().split(),
                 'md_format': element.findtext('md_format', default='cfg').strip(),
                 'selection_mask': self.parse_slice_atoms(element.findtext('selection_mask',default='[:]')),
-                'milady_comput': True
+                'milady_compute': self.boolean_converter(element.findtext('milady_compute', default='False').strip())
             }  
 
         # Validate MD format
@@ -367,7 +377,6 @@ class UNSEENConfigParser:
         
         gmm = defaults.copy()
         for child in opts:
-            print('child gmm')
             tag = child.tag
             if tag in ['nb_bin_histo', 'nb_selected']:
                 gmm[tag] = int(child.text)

@@ -3,15 +3,11 @@ import pickle
 from typing import List, Dict, Any
 
 sys.path.insert(0,'/home/lapointe/WorkML/Unseen_dev/')
-sys.path.insert(0,'/home/marinica/GitHub/UO2analysis.git/Src_detection/')
 os.system('pwd') 
 #from Src import ReferenceBuilder
 from Src.parser.unseen_parser import UNSEENConfigParser
 from Src.analysis.reference import ReferenceBuilder, InferenceBuilder
 from Src.mld.milady import ComputeDescriptor
-
-from Src import DBManager, DBDictionnaryBuilder, \
-                  Optimiser, Regressor, Descriptor, Milady, DescriptorsHybridation
 
 
 def split_path(path: str) -> tuple[str, str]:
@@ -68,7 +64,7 @@ if __name__ == "__main__":
         print_fancy_header(f"Reading Auto Config from {auto_file}")
         auto_parser = UNSEENConfigParser(auto_file)
         auto_config = auto_parser.auto_config
-        #print_config("Auto Configuration", auto_config)
+
     else:
         print_fancy_header(f"{auto_file} not found. Using Default Auto Config")
         auto_parser = UNSEENConfigParser(auto_file)  # Will create defaults
@@ -80,7 +76,7 @@ if __name__ == "__main__":
         print_fancy_header(f"Reading Custom Config from {custom_file}")
         custom_parser = UNSEENConfigParser(custom_file)
         custom_config = custom_parser.custom_config
-        #print_config("Custom Configuration", {"References": custom_config})
+
     else:
         print_fancy_header(f"{custom_file} not found. No Custom References")
         
@@ -97,10 +93,6 @@ if __name__ == "__main__":
     #put current directory into some variable: 
     cdir = os.getcwd()
     
-    milady_compute = False
-    unseen_train = False
-    unseen_inference = True
-    
     if auto_config:
         # Get the MD files directory, MD file format, and a name for the pickle file
         auto_directory = auto_config.get('directory', './')
@@ -115,7 +107,7 @@ if __name__ == "__main__":
         print(f"Output pickle file: {auto_pickle_file}\n")
         
         # Create an instance of ComputeDescriptor with the XML options
-        if milady_compute:
+        if auto_parser.milady_compute :
            os.chdir(dir_where)
            cd_auto = ComputeDescriptor(path_bulk=dir_name,
                                        pickle_data_file=auto_pickle_file,
@@ -140,20 +132,22 @@ if __name__ == "__main__":
             print(f"MD file format: {ref_md_format}")
             print(f"Output pickle file: {ref_pickle_file}\n")
           
-            if milady_compute:  
+            if custom_parser.milady_compute:  
                os.chdir(dir_where)         
                cd_custom = ComputeDescriptor(path_bulk=dir_name,
                                              pickle_data_file=ref_pickle_file,
                                              md_format=ref_md_format)
                cd_custom.compute()  
                os.chdir(cdir)
+
+    print_config("Custom calculation", {"Setting":{"milady_compute":custom_parser.milady_compute, "useen_train":custom_parser.unseen_train}})
     print_config("Custom Configuration", {"References": custom_config})
     # ---------------------------------------------------------
     # Build models get the references ... 
     #----------------------------------------------------------
     os.system('pwd')
-    
-    if unseen_train:
+
+    if custom_parser.unseen_train:
         try:
             builder = ReferenceBuilder(auto_config=auto_config, 
                                        custom_config=custom_config)
@@ -172,7 +166,7 @@ if __name__ == "__main__":
             print(f"\nError during model building: {str(e)}")
             sys.exit(1)
             
-    if unseen_inference: 
+    if custom_parser.inference_config : 
         
         print("\n" + "="*50)
         print("Inference Time".center(50))
@@ -180,8 +174,7 @@ if __name__ == "__main__":
         inference_config = custom_parser.inference_config
         print_config("Inference Configuration", inference_config)
     
-        inference_config['milady_comput'] = False
-        if inference_config['milady_comput'] :
+        if inference_config['milady_compute'] :
         
             # Extract parameters for inference
             inf_directory = inference_config.get('directory', './')
@@ -205,11 +198,9 @@ if __name__ == "__main__":
             )
             cd_inference.compute()
             os.chdir(cdir)    
+
         else : 
-           #print(f'Directly reading HPC pkl file : {inference_config['pickle_data']}')
-           print(f'Directly reading HPC pkl file : {inference_config}')
-        
-        #print(f'Directly reading HPC pkl file : {inference_config}')
+            print(f"Directly reading HPC pkl file : {inference_config['pickle_data']}")
 
         #try: 
         inference = InferenceBuilder(inference_config=inference_config, 

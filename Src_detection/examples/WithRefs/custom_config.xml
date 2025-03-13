@@ -1,12 +1,18 @@
 <Configuration>
     <PickleMetaModel>
-        <path>References</path>
+        <path>/home/lapointe/WorkML/Unseen_dev/examples/WithRefs/References</path>
     </PickleMetaModel>
     
     <Custom>
+        <UnseenCalculation>
+            <milady_compute>False</milady_compute>
+            <unseen_train>False</unseen_train>
+        </UnseenCalculation>
+
         <Reference>
             <name>bulk_C15</name>
-            <directory>References/bulk_C15/</directory>
+	    <contour>True</contour>
+	    <directory>References/bulk_C15/</directory>
             <id_atoms>all</id_atoms>
             <md_format>poscar</md_format>
             <model>MCD MAHA</model>
@@ -18,7 +24,8 @@
         </Reference>
         <Reference>
             <md_format>poscar</md_format>
-            <name>sia_110</name>
+	    <name>sia_110</name>
+	    <contour>True</contour>
             <directory>References/sia_110/</directory>
             <model>GMM</model>
             <GMM>
@@ -46,6 +53,7 @@
     </Custom>
 
     <Inference>
+      <milady_compute>False</milady_compute>
       <name>testC15</name>
       <directory>Analyse/data</directory>
       <id_atoms>all</id_atoms>
