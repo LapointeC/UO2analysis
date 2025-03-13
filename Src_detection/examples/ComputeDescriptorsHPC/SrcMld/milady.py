@@ -735,6 +735,61 @@ class Descriptor :
         return cls(param,None)
 
     @classmethod
+    def BSO4FixNeighbour(cls, r_cut : float = DEFAULTS["r_cut"],
+             j_max : float = 1.5,
+             lbso4_diag : bool = False, 
+             inv_r0_input : float = 0.993633802276324,
+             fix_Nmax_neigh : int = 20,
+             delta_fix_N_rcut : float = 0.8,
+             discrete_fix_N_rcut : int = 100) :
+        """Compute bi-spectrum SO4 descriptor with fixed number of neighbours for a given subset of configurations.
+        More informations are avaible at :  https://ai-atoms.github.io/milady-docs/contents/ml/descriptors.html
+        See also Paul Lafourcade paper: https://doi.org/10.1016/j.commatsci.2023.112534 :)
+
+        Parameters 
+        ----------
+
+            r_cut: float 
+                Cut-off raduis for descriptor calculation
+
+            j_max: float
+                j_max for hyper-spherical harmonic decomposition               
+
+            lbso4_diag: bool 
+                Boolean to use only diagonal component for spherical decomposition (i.e j_1 = j_2)
+
+            inv_r0_input: float
+                Value of the maximum projection at north pole in pi unit. Value has to be slighlty lower than 1
+                You should trust the default choice ...
+
+            fix_Nmax_neigh: int 
+                Fixed number of local neighbours to compute BSO(4)
+
+            delta_fix_N_rcut: float
+                Define bound for grid search on r_cut^{\star} on smooth cutting function 
+                (1.0 - delta_fix_N_rcut) \leq r_cut^{\star} \leq (1.0 + delta_fix_N_rcut)
+
+            discrete_fix_N_rcut: int 
+                Number of discretisation step to find r_cut^{\star} on radial grid
+        """
+
+        param = {}
+        param['descriptor_type'] = 9
+        param['r_cut'] = r_cut
+        param['lbso4_diag'] = lbso4_diag
+        param['j_max'] = j_max
+        param['inv_r0_input'] = inv_r0_input
+        
+        # fix part 
+        param['Nfix'] = True
+        param['fix_Nmax_neigh'] = fix_Nmax_neigh
+        param['delta_fix_N_rcut'] = delta_fix_N_rcut
+        param['discrete_fix_N_rcut'] = discrete_fix_N_rcut
+
+        #need to be tabulated ...
+        return cls(param,None)
+
+    @classmethod
     def Hybrid_G2_AFS(cls, r_cut : float = DEFAULTS["r_cut"],
                       n_g2_eta : int = 1, 
                       n_g2_rs : int = 1,

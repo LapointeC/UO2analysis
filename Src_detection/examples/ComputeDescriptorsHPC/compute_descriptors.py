@@ -1,6 +1,7 @@
 import pickle
 import os
 import glob
+import re
 
 from typing import Dict, TypedDict
 from ase import Atoms
@@ -121,6 +122,13 @@ optimiser = Optimiser.Milady(fix_no_of_elements=1,
                              desc_forces=False)
 regressor = Regressor.ComputeDescriptors(write_design_matrix=False)
 descriptor_bso4 = Descriptor.BSO4(r_cut=5.0,j_max=4.0,lbso4_diag=False)
+descriptor_bso4 = Descriptor.BSO4FixNeighbour(r_cut=5.0,
+                                              j_max=4.0,
+                                              lbso4_diag=False,
+                                              fix_Nmax_neigh=30,
+                                              delta_fix_N_rcut=0.6,
+                                              discrete_fix_N_rcut=100)
+
 
 if hybridation :
     descriptor_k2b = Descriptor.Kernel2Body(r_cut=5.0,
